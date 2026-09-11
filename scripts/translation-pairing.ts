@@ -134,6 +134,7 @@ const ROOT_PAIRED_DOCUMENT_ARTIFACT = /^(?:brand_guidelines|contributing|safety)
 const NON_SOURCE_DIRECTORIES = new Set([
   'node_modules',
   'lib',
+  'dist',
   '.pnpm-store',
   '.cache',
   'coverage',
@@ -152,6 +153,7 @@ export const TRANSLATION_SCOPE_GLOB_EXCLUDES = [
   '.agents/notes/archived/**',
   '**/node_modules/**',
   '**/lib/**',
+  '**/dist/**',
   '**/.pnpm-store/**',
   '**/.cache/**',
   '**/coverage/**',

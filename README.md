@@ -12,7 +12,7 @@ DeepSeek Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的�
 
 ## 核心特性与优势
 
-- **极速冷启动（2.6x 提速）**：通过 Bun 原生 C++/Zig 内置的 TypeScript 转译与极速模块缓存，CLI 启动耗时从 ~240ms 降至 ~90ms，Profile 解析耗时从 ~275ms 降至 ~105ms。
+- **极速冷启动（2.6x 提速）**：得益于 Bun 现代化的 Rust 底层原生架构、内置 TypeScript 极速转译与瞬时模块缓存，CLI 启动耗时从 ~240ms 降至 ~90ms，Profile 解析耗时从 ~275ms 降至 ~105ms。
 - **更低常驻内存（节省 ~28% 内存）**：基础 CLI 常驻内存从 66 MB 降低至 47 MB，在多 Agent 并发与长会话下系统开销显著更小。
 - **纯 Bun 零依赖运行**：经严格环境隔离验证，从系统 PATH 中完全移除 Node.js 依然能够全量驱动 80+ 插件依赖图解析、Agent 任务执行与 Web 控制台服务。
 - **双引擎无缝兼容**：保留对 Node.js 22.19 / 24 / 26 的 100% 兼容，所有官方单元测试全量通过。
@@ -41,7 +41,34 @@ DeepSeek Harness 处于 _开发者预览_ 阶段，正在快速迭代。**未来
 
 ### 通过 Bun 极速运行（推荐）
 
-安装 [Bun](https://bun.sh/)（v1.1.0 或更高版本），然后直接运行：
+#### 1. 免安装使用 `bunx`（最便捷）
+
+无需克隆代码或全局安装，直接通过 `bunx` 唤起：
+
+```sh
+export DEEPSEEK_API_KEY="sk-..."
+bunx dsh-bun --profile headless "task"
+```
+
+#### 2. 全局安装为命令行工具
+
+通过 Bun 全局安装 `dsh-bun`：
+
+```sh
+bun add -g dsh-bun
+```
+
+安装后，`dsh` 与 `dsh-bun` 两个可执行命令均可直接调用：
+
+```sh
+export DEEPSEEK_API_KEY="sk-..."
+dsh --profile headless "task"
+dsh --profile web
+```
+
+#### 3. 源码本地调试与开发
+
+安装 [Bun](https://bun.sh/)（v1.1.0 或更高版本），克隆仓库后直接运行源码：
 
 ```sh
 bun run apps/cli/src/bin.ts --profile headless "task"
@@ -52,6 +79,15 @@ bun run apps/cli/src/bin.ts --profile web-clean --port 3080
 
 ```sh
 bun run dsh:bun --profile headless "task"
+```
+
+#### 4. 打包并发布为 Bun 原生包
+
+运行自动化打包流水线，将 CLI 连同其依赖解析打包至 `dist/dsh-bun`：
+
+```sh
+pnpm run package:bun
+cd dist/dsh-bun && bun publish --access public
 ```
 
 <a id="run-from-source"></a>

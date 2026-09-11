@@ -12,7 +12,7 @@ Documentation: [https://deepseek-harness.github.io/deepseek-harness/](https://de
 
 ## Core Features & Highlights
 
-- **Blazing Fast Cold Startup (2.6x Speedup)**: With Bun's native Zig/C++ TypeScript transpilation and instant module cache, CLI startup latency dropped from ~240ms to ~90ms, and Profile resolution latency dropped from ~275ms to ~105ms.
+- **Blazing Fast Cold Startup (2.6x Speedup)**: Leveraging Bun's modern Rust-based native architecture, built-in instant TypeScript transpilation, and fast module cache, CLI startup latency dropped from ~240ms to ~90ms, and Profile resolution latency dropped from ~275ms to ~105ms.
 - **Lower Memory Footprint (~28% Saved)**: Baseline CLI memory dropped from 66 MB RSS to 47 MB RSS, reducing system overhead in concurrent multi-agent tasks and long sessions.
 - **Pure Bun Zero-Dependency Execution**: Verified by physical environment isolation—completely removing Node.js from PATH still seamlessly runs 80+ plugins, agent tasks, and Web console services.
 - **Dual-Engine Seamless Compatibility**: 100% compatibility with Node.js 22.19 / 24 / 26 is preserved, passing all official unit tests.
@@ -41,7 +41,34 @@ Review the [safety notice](SAFETY.zh.md) before running the project.
 
 ### Run with Bun (Recommended)
 
-Install [Bun](https://bun.sh/) (v1.1.0 or higher), then run directly:
+#### 1. Instant execution with `bunx` (Fastest)
+
+Run directly without cloning or global installation:
+
+```sh
+export DEEPSEEK_API_KEY="sk-..."
+bunx dsh-bun --profile headless "task"
+```
+
+#### 2. Global CLI installation
+
+Install `dsh-bun` globally via Bun:
+
+```sh
+bun add -g dsh-bun
+```
+
+After installation, both `dsh` and `dsh-bun` commands are available in PATH:
+
+```sh
+export DEEPSEEK_API_KEY="sk-..."
+dsh --profile headless "task"
+dsh --profile web
+```
+
+#### 3. Run directly from source
+
+Install [Bun](https://bun.sh/) (v1.1.0 or higher), clone the repository and run directly:
 
 ```sh
 bun run apps/cli/src/bin.ts --profile headless "task"
@@ -52,6 +79,15 @@ Or using the configured npm script in `package.json`:
 
 ```sh
 bun run dsh:bun --profile headless "task"
+```
+
+#### 4. Package and publish for Bun
+
+Stage the compiled CLI and resolve workspace dependencies into `dist/dsh-bun`:
+
+```sh
+pnpm run package:bun
+cd dist/dsh-bun && bun publish --access public
 ```
 
 <a id="run-from-source"></a>
