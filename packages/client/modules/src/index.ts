@@ -32,7 +32,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { Service } from '@deepseek-ai/cordis'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Entry } from '@deepseek-ai/cordis-plugin-loader'
-import type { IndexInjection, WebServer } from '@deepseek-ai/dsh-host-webserver'
+import type { IndexInjection } from '@deepseek-ai/dsh-host-webserver'
 import { exactPackageSpecifier, parseDshClient, stripClientSuffix } from './client/manifest.ts'
 import type { WebBootBatch, WebBootBatchPhase, WebBootEntry, WebBootGraph } from './client/manifest.ts'
 
@@ -535,7 +535,7 @@ export class ClientModuleRegistry extends Service {
     }
 
     const registerWebCarrier = (webCtx: Context): void => {
-      const server = (webCtx.get('webServer') ?? webCtx.webServer) as WebServer
+      const server = webCtx.get('webServer') ?? webCtx.webServer
       webCtx.effect(
         () => server.register({ kind: 'prefix', path: '/plugins', handler: this.serveBundle }),
         'client-modules: bundle route',

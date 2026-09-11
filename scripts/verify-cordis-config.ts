@@ -10,7 +10,7 @@
  * Loader fixtures resolve from their package manifest.
  */
 
-import { globSync, readFileSync } from 'node:fs'
+import { existsSync, globSync, readFileSync } from 'node:fs'
 import { dirname, relative, resolve } from 'node:path'
 import { Script } from 'node:vm'
 import ts from 'typescript'
@@ -57,11 +57,22 @@ const CHOOSER_BACKEND_PACKAGES = [
 const errors: string[] = []
 const pluginReferences: PluginReference[] = []
 
+function readConfigFile(absPath: string): string {
+  let content = readFileSync(absPath, 'utf8')
+  if ((content.startsWith('./') || content.startsWith('../')) && !content.includes('\n')) {
+    const target = resolve(dirname(absPath), content.trim())
+    if (existsSync(target)) {
+      content = readFileSync(target, 'utf8')
+    }
+  }
+  return content
+}
+
 if (import.meta.main) {
   const files = cordisConfigFiles(root)
 
   for (const file of files) {
-    const document = loadCordisYaml(readFileSync(resolve(root, file), 'utf8'))
+    const document = loadCordisYaml(readConfigFile(resolve(root, file)))
     if (!isUnknownArray(document)) {
       errors.push(`${file}: root must be a Loader entry array`)
       continue
@@ -162,7 +173,7 @@ function validatePresetPlaneSeparation(): string[] {
 
 /** Every entry of one config file, or an empty list when it is not an entry array. */
 function loadEntries(file: string): unknown[] {
-  const document = loadCordisYaml(readFileSync(resolve(root, file), 'utf8'))
+  const document = loadCordisYaml(readConfigFile(resolve(root, file)))
   return isUnknownArray(document) ? document : []
 }
 

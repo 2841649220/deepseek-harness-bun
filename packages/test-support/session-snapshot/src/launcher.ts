@@ -414,13 +414,22 @@ function linkProfilePackage(source: string, cwd: string, packageName: string): v
  * @returns absolute materialized patch path.
  */
 export function materializeProfilePatch(source: string, cwd: string, targetDir: string, index: number): string {
-  const parsed = yaml.load(readFileSync(source, 'utf8'), { schema: entryListSchema })
+  let resolvedSource = source
+  let content = readFileSync(source, 'utf8')
+  if ((content.startsWith('./') || content.startsWith('../')) && !content.includes('\n')) {
+    const target = resolve(dirname(source), content.trim())
+    if (existsSync(target)) {
+      resolvedSource = target
+      content = readFileSync(target, 'utf8')
+    }
+  }
+  const parsed = yaml.load(content, { schema: entryListSchema })
   if (!Array.isArray(parsed)) throw new Error(`snapshot profile patch must be a top-level array: ${source}`)
   const patches = parsed as PatchOptions[]
-  const baseDir = dirname(source)
+  const baseDir = dirname(resolvedSource)
   const resolveName = (value: string): string => {
     const packageName = barePackageName(value)
-    if (packageName !== undefined) linkProfilePackage(source, cwd, packageName)
+    if (packageName !== undefined) linkProfilePackage(resolvedSource, cwd, packageName)
     return value.startsWith('./') || value.startsWith('../')
       ? pathToFileURL(resolve(baseDir, value)).href
       : value
