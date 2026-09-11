@@ -64,7 +64,19 @@ bun add -g @2841649220/dsh_bun
 bunx @2841649220/dsh_bun --profile headless "task"
 ```
 
-After a global install, `dsh-bun --profile headless "task"` and `dsh-bun --profile web` work the same way. The staging script declares the `dsh-bun` command only, because claiming `dsh` would shadow the published `@deepseek-ai/dsh` command according to PATH order; `--with-dsh-bin` adds that alias.
+A global install provides three commands that all drive the same CLI: `dsh`, `dsh-bun`, and `dsh_bun` (`dsh_bun` is the package name and is easy to mistake for the command; all three work):
+
+```sh
+dsh web
+dsh-bun web
+dsh_bun web
+```
+
+`bunx @2841649220/dsh_bun` needs a profile argument, or the CLI reports `--profile <name> is required`; use `bunx @2841649220/dsh_bun web` to open the Web UI directly.
+
+#### What the package resolves
+
+The published package resolves `@deepseek-ai/dsh-code-runtime-worker-thread` to the patched fork `@2841649220/dsh-code-runtime-worker-thread`, because the upstream release aborts during module evaluation under Bun. The alias lives in package metadata only, so profile configuration and dependency ranges are unchanged; a build that wants the upstream package passes `--patched-scope ''`.
 
 #### 2. Install from a GitHub Release (no registry involved)
 

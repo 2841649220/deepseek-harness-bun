@@ -64,7 +64,19 @@ bun add -g @2841649220/dsh_bun
 bunx @2841649220/dsh_bun --profile headless "task"
 ```
 
-`dsh-bun --profile headless "task"` 与 `dsh-bun --profile web` 在全局安装后同样可用。打包脚本默认只声明 `dsh-bun` 一个命令，避免与已发布的 `@deepseek-ai/dsh` 的 `dsh` 互相遮蔽；需要时用 `--with-dsh-bin` 追加。
+全局安装后有三个命令指向同一个 CLI：`dsh`、`dsh-bun`、`dsh_bun`（`dsh_bun` 是包名，容易误当成命令；实际上面三个都能用）：
+
+```sh
+dsh web
+dsh-bun web
+dsh_bun web
+```
+
+注意 `bunx @2841649220/dsh_bun` 必须带 profile，否则 CLI 会报 `--profile <name> is required`；想直接开 Web UI 用 `bunx @2841649220/dsh_bun web`。
+
+#### 打包内容说明
+
+发布包把 `@deepseek-ai/dsh-code-runtime-worker-thread` 解析到本仓库发布的补丁分支 `@2841649220/dsh-code-runtime-worker-thread`（上游发布版在 Bun 下模块求值阶段即失败）。别名只在包元数据里，profile 配置与依赖范围不变；不需要该补丁的构建可用 `--patched-scope ''` 关闭。
 
 #### 2. 从 GitHub Release 安装（不经过 registry）
 
