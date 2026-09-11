@@ -1,11 +1,12 @@
 /**
- * Prepare a self-contained Bun-first distribution package for npm publication.
+ * Prepare a self-contained Bun-first distribution package for publication.
  *
- * This reads the compiled `apps/cli` artifacts, adjusts the shebang to `bun`,
- * transforms workspace dependencies to public npm registry versions,
- * configures bin aliases (`dsh` and `dsh-bun`), and stages the package
- * ready for `bun publish` or `npm publish`.
- *
+ * The stage reads the compiled `apps/cli` artifacts, points the bin shebang at
+ * Bun, resolves every `workspace:` dependency to the registry version of that
+ * workspace package, and writes the publication manifest and its README. Every
+ * input it needs must exist: a missing build output, an unresolvable workspace
+ * dependency, or an absent LICENSE aborts the stage instead of publishing a
+ * package that cannot install.
  * @module scripts/prepare-bun-package
  */
 
@@ -13,28 +14,59 @@ import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, write
 import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 
-const root = resolve(import.meta.dirname, '..')
+/** Staging inputs live under this repository; tests pass their own fixture root. */
+const repositoryRoot = resolve(import.meta.dirname, '..')
 
+/**
+ * Publication name. The unscoped name `dsh-bun` is owned by another publisher
+ * on the public registry, so the staged package uses `dsh_bun`, which is free.
+ */
+const DEFAULT_PACKAGE_NAME = 'dsh_bun'
+
+/** Default staging directory, relative to the repository root. */
+const DEFAULT_OUT_DIR = join('dist', 'dsh_bun')
+
+/**
+ * Default command names. The stage claims `dsh-bun` only: installing a second
+ * `dsh` command would shadow the published `@deepseek-ai/dsh` bin according to
+ * PATH order. `--with-dsh-bin` adds that alias explicitly.
+ */
+const DEFAULT_BIN_NAMES: readonly string[] = ['dsh-bun']
+
+/** Shebang of the staged bin: the staged CLI runs on Bun, not on the Node launcher. */
+const BUN_SHEBANG = '/usr/bin/env bun'
+
+/** Repository the published manifest points back to. */
+const REPOSITORY_URL = 'git+https://github.com/2841649220/deepseek-harness-bun.git'
+
+/** The subset of `apps/cli/package.json` the stage reads. */
 interface CliPackageJson {
   name: string
   version: string
-  description?: string
-  license?: string
-  type?: string
-  bin?: Record<string, string>
-  files?: string[]
-  dsh?: Record<string, unknown>
   dependencies?: Record<string, string>
-  devDependencies?: Record<string, string>
-  peerDependencies?: Record<string, string>
-  publishConfig?: Record<string, string>
-  engines?: Record<string, string>
-  repository?: Record<string, string>
+}
+
+/** Options accepted by {@link prepareBunPackage}. */
+export interface PrepareBunPackageOptions {
+  /** Repository root holding `apps/cli` and the workspace manifests. */
+  root?: string | undefined
+  /** Publication package name; defaults to `dsh_bun`. */
+  name?: string | undefined
+  /** Output directory, absolute or relative to `root`; defaults to `dist/dsh_bun`. */
+  outDir?: string | undefined
+  /** Published version; defaults to the CLI manifest version. */
+  version?: string | undefined
+  /** Version range used for every `workspace:` dependency, for a release the registry does not carry yet. */
+  depVersion?: string | undefined
+  /** npm registry recorded in `publishConfig`. */
+  registry?: string | undefined
+  /** Command names mapped to the staged bin; defaults to `dsh-bun`. */
+  bins?: readonly string[] | undefined
 }
 
 /**
- * Recursively find all package.json files and map package name -> version.
- * @param rootDir Workspace root path.
+ * Recursively find all package.json files and map package name to version.
+ * @param rootDir - Workspace root path.
  * @returns Map of package name to version.
  */
 function collectWorkspaceVersions(rootDir: string): Map<string, string> {
@@ -57,7 +89,8 @@ function collectWorkspaceVersions(rootDir: string): Map<string, string> {
             versions.set(pkg.name, pkg.version)
           }
         } catch {
-          // ignore unparseable files
+          // A manifest the scan cannot parse is not a publication input: the
+          // dependency pass aborts on any name this map fails to answer.
         }
       }
     }
@@ -74,87 +107,121 @@ function collectWorkspaceVersions(rootDir: string): Map<string, string> {
 }
 
 /**
- * Stage the Bun distribution package into the target directory.
- * @param options Configuration options for package name, output directory, and version.
- * @returns Object with output directory, package name, and version.
+ * Drop a leading interpreter line so the stage can install its own.
+ * @param source - bin file contents.
+ * @returns the contents without a shebang line.
  */
-export function prepareBunPackage(options: {
-  name?: string | undefined
-  outDir?: string | undefined
-  version?: string | undefined
-  depVersion?: string | undefined
-  registry?: string | undefined
-} = {}): { outDir: string; packageName: string; version: string } {
-  const cliPkgPath = resolve(root, 'apps/cli/package.json')
-  const cliPkg = JSON.parse(readFileSync(cliPkgPath, 'utf8')) as CliPackageJson
+function withoutShebang(source: string): string {
+  if (!source.startsWith('#!')) return source
+  const breakIndex = source.indexOf('\n')
+  return breakIndex === -1 ? '' : source.slice(breakIndex + 1)
+}
 
-  const packageName = options.name ?? 'dsh-bun'
+/**
+ * Resolve the publication dependency map, replacing `workspace:` specs with registry ranges.
+ * @param dependencies - the CLI manifest dependency map.
+ * @param workspaceVersions - discovered workspace package versions.
+ * @param depVersion - explicit range overriding every discovered workspace version.
+ * @returns the publication dependency map.
+ * @throws when a `workspace:` dependency has neither a workspace version nor an explicit range.
+ */
+function publicationDependencies(
+  dependencies: Record<string, string>,
+  workspaceVersions: Map<string, string>,
+  depVersion: string | undefined,
+): Record<string, string> {
+  const resolved: Record<string, string> = {}
+  const unresolved: string[] = []
+  for (const [dep, spec] of Object.entries(dependencies)) {
+    if (!spec.startsWith('workspace:')) {
+      resolved[dep] = spec
+      continue
+    }
+    if (depVersion !== undefined) {
+      resolved[dep] = depVersion
+      continue
+    }
+    const version = workspaceVersions.get(dep)
+    if (version === undefined) {
+      unresolved.push(dep)
+      continue
+    }
+    resolved[dep] = `^${version}`
+  }
+  if (unresolved.length > 0) {
+    throw new Error(
+      'prepare-bun-package: no workspace version for '
+      + unresolved.join(', ')
+      + '; pass --dep-version <range> to publish against a version that is not in this workspace',
+    )
+  }
+  return resolved
+}
+
+/**
+ * Stage the Bun distribution package into the target directory.
+ * @param options - package name, staging directory, version, dependency override, registry, and bins.
+ * @returns the staging directory, package name, version, and bin names.
+ * @throws when the CLI build output, a workspace dependency version, or the repository LICENSE is missing.
+ */
+export function prepareBunPackage(options: PrepareBunPackageOptions = {}): {
+  outDir: string
+  packageName: string
+  version: string
+  bins: readonly string[]
+} {
+  const root = options.root ?? repositoryRoot
+  const cliPkg = JSON.parse(readFileSync(resolve(root, 'apps/cli/package.json'), 'utf8')) as CliPackageJson
+
+  const packageName = options.name ?? DEFAULT_PACKAGE_NAME
   const version = options.version ?? cliPkg.version
-  const outDir = resolve(root, options.outDir ?? 'dist/dsh-bun')
+  const bins = options.bins ?? DEFAULT_BIN_NAMES
+  if (bins.length === 0) throw new Error('prepare-bun-package: the publication package needs at least one bin name')
+  const outDir = resolve(root, options.outDir ?? DEFAULT_OUT_DIR)
 
   console.log(`prepare-bun-package: staging ${packageName}@${version} into ${outDir}...`)
 
-  // 1. Clean and prepare output directory
+  // 1. Clean and prepare the output directory.
   if (existsSync(outDir)) {
     rmSync(outDir, { recursive: true, force: true })
   }
   mkdirSync(outDir, { recursive: true })
 
-  // 2. Copy compiled lib from apps/cli
+  // 2. Copy the compiled CLI artifacts.
   const cliLibDir = resolve(root, 'apps/cli/lib')
   if (!existsSync(cliLibDir)) {
-    throw new Error('apps/cli/lib not found. Run "pnpm run build" before preparing the Bun package.')
+    throw new Error('prepare-bun-package: apps/cli/lib not found. Run "pnpm run build" before preparing the Bun package.')
   }
   cpSync(cliLibDir, join(outDir, 'lib'), { recursive: true })
 
-  // 3. Update bin.js shebang to `#!/usr/bin/env bun`
+  // 3. Point the bin at Bun. The compiled bin carries the Node launcher's
+  // shebang, and an artifact with no interpreter line at all is repairable here
+  // rather than published as a file no shell can execute.
   const binPath = join(outDir, 'lib/bin.js')
-  if (existsSync(binPath)) {
-    let binContent = readFileSync(binPath, 'utf8')
-    if (binContent.startsWith('#!/usr/bin/env node')) {
-      binContent = `#!/usr/bin/env bun\n${binContent.slice('#!/usr/bin/env node\n'.length)}`
-    } else if (!binContent.startsWith('#!')) {
-      binContent = `#!/usr/bin/env bun\n${binContent}`
-    }
-    writeFileSync(binPath, binContent, 'utf8')
+  if (!existsSync(binPath)) {
+    throw new Error(`prepare-bun-package: ${binPath} is missing; the CLI build must emit the bin its manifest references`)
   }
+  writeFileSync(binPath, `#!${BUN_SHEBANG}\n${withoutShebang(readFileSync(binPath, 'utf8'))}`, 'utf8')
 
-  // 4. Resolve workspace:^ dependencies to npm versions
+  // 4. Resolve workspace dependencies to published versions.
   const workspaceVersions = collectWorkspaceVersions(root)
   console.log(`prepare-bun-package: discovered ${workspaceVersions.size} workspace package versions`)
+  const dependencies = publicationDependencies(cliPkg.dependencies ?? {}, workspaceVersions, options.depVersion)
 
-  const transformedDeps: Record<string, string> = {}
-  for (const [dep, ver] of Object.entries(cliPkg.dependencies ?? {})) {
-    if (ver.startsWith('workspace:')) {
-      const knownVer = workspaceVersions.get(dep)
-      if (knownVer) {
-        transformedDeps[dep] = `^${knownVer}`
-      } else if (options.depVersion) {
-        transformedDeps[dep] = options.depVersion
-      } else {
-        transformedDeps[dep] = `^${cliPkg.version}`
-      }
-    } else {
-      transformedDeps[dep] = ver
-    }
-  }
-
-  // 5. Construct publication package.json
+  // 5. Construct the publication manifest. The CLI's `dsh.configTrees` entry is not
+  // carried over: it points at a sibling package inside this repository, which
+  // the installed package does not contain.
   const pubPkg: Record<string, unknown> = {
     name: packageName,
     version,
-    description: 'DeepSeek Harness CLI - High-performance agent harness optimized for Bun runtime',
+    description: 'DeepSeek Harness CLI - Bun-first distribution of the dsh command',
     type: 'module',
-    bin: {
-      dsh: 'lib/bin.js',
-      'dsh-bun': 'lib/bin.js',
-    },
+    bin: Object.fromEntries(bins.map(bin => [bin, 'lib/bin.js'])),
     files: [
       'lib/*.js',
       'README.md',
       'LICENSE',
     ],
-    dsh: cliPkg.dsh,
     engines: {
       bun: '>=1.1.0',
       node: '^22.19.0 || >=24.0.0',
@@ -165,7 +232,7 @@ export function prepareBunPackage(options: {
     },
     repository: {
       type: 'git',
-      url: 'git+https://github.com/2841649220/deepseek-harness-bun.git',
+      url: REPOSITORY_URL,
     },
     license: 'MIT',
     keywords: [
@@ -175,21 +242,29 @@ export function prepareBunPackage(options: {
       'bun',
       'ai',
       'llm',
-      'cordis',
     ],
-    dependencies: transformedDeps,
+    dependencies,
   }
 
   writeFileSync(join(outDir, 'package.json'), `${JSON.stringify(pubPkg, null, 2)}\n`, 'utf8')
 
-  // 6. Write custom README.md tailored for Bun users
+  // 6. Write the packaged README.
+  const commands = bins
+    .map(bin => `${bin} --profile headless "Analyze the current workspace"`)
+    .join('\n')
   const bunReadme = `# ${packageName}
 
-DeepSeek Harness (dsh) CLI distribution optimized for the **[Bun](https://bun.sh/)** runtime.
+DeepSeek Harness (\`dsh\`) CLI distribution for the **[Bun](https://bun.sh/)** runtime.
+
+## Requirements
+
+Bun 1.1.0 or newer, installed with the official installer so that \`bun.exe\` resolves on \`PATH\`.
+The generated launchers look the interpreter up by name; an npm-installed Bun, which exposes only
+\`bun\`, \`bun.cmd\`, and \`bun.ps1\`, is not found on Windows.
 
 ## Quick Start with Bun
 
-### 1. Direct Execution with \`bunx\`
+### 1. Direct execution with \`bunx\`
 
 No installation required:
 
@@ -198,7 +273,7 @@ export DEEPSEEK_API_KEY="sk-..."
 bunx ${packageName} --profile headless "Analyze the current workspace"
 \`\`\`
 
-### 2. Global Installation
+### 2. Global installation
 
 Install globally via Bun:
 
@@ -206,29 +281,29 @@ Install globally via Bun:
 bun add -g ${packageName}
 \`\`\`
 
-Once installed, both \`dsh\` and \`dsh-bun\` commands are available in your PATH:
+Once installed, the staged commands are available in your PATH:
 
 \`\`\`bash
 export DEEPSEEK_API_KEY="sk-..."
 
-# Run an interactive or headless session
-dsh --profile headless "Run unit tests and fix any failures"
-
-# Or use dsh-bun explicitly
-dsh-bun --profile headless "Summarize recent commits"
+${commands}
 \`\`\`
 
-## Configuration & Environment
+## Configuration and environment
 
 - \`DEEPSEEK_API_KEY\`: (Required) Your DeepSeek API key.
 - \`DEEPSEEK_BASE_URL\`: (Optional) Custom DeepSeek API endpoint or proxy.
 
 ## Profiles
 
-DeepSeek Harness supports multiple execution profiles:
 - \`--profile headless\`: Headless autonomous agent mode.
-- \`--profile ptc\`: Program-Thinking-Control loop.
+- \`--profile web\`: Browser UI.
 - \`--profile acp\`: Agent Client Protocol server mode.
+- \`--profile sdk\`: JSON-RPC SDK server mode.
+
+A profile declared \`patchReload: live\` (the shipped \`web\` profile) applies edits to its
+\`cordis.patch.yml\` immediately only on Node, whose internal module loader backs the HMR service.
+Under Bun those edits apply on the next boot.
 
 ## License
 
@@ -236,14 +311,15 @@ MIT License. DeepSeek Harness is an open-source project by DeepSeek AI.
 `
   writeFileSync(join(outDir, 'README.md'), bunReadme, 'utf8')
 
-  // 7. Copy LICENSE
+  // 7. Copy the repository LICENSE.
   const licensePath = resolve(root, 'LICENSE')
-  if (existsSync(licensePath)) {
-    cpSync(licensePath, join(outDir, 'LICENSE'))
+  if (!existsSync(licensePath)) {
+    throw new Error(`prepare-bun-package: ${licensePath} not found; the publication claims MIT and must ship its text`)
   }
+  cpSync(licensePath, join(outDir, 'LICENSE'))
 
   console.log(`prepare-bun-package: successfully prepared ${packageName}@${version} in ${outDir}`)
-  return { outDir, packageName, version }
+  return { outDir, packageName, version, bins }
 }
 
 if (import.meta.main) {
@@ -254,9 +330,14 @@ if (import.meta.main) {
       version: { type: 'string' },
       'dep-version': { type: 'string' },
       registry: { type: 'string' },
+      bin: { type: 'string', multiple: true },
+      'with-dsh-bin': { type: 'boolean' },
     },
     allowPositionals: false,
   })
+
+  const bins = [...values.bin ?? DEFAULT_BIN_NAMES]
+  if (values['with-dsh-bin'] === true && !bins.includes('dsh')) bins.push('dsh')
 
   const res = prepareBunPackage({
     name: values.name,
@@ -264,9 +345,10 @@ if (import.meta.main) {
     version: values.version,
     depVersion: values['dep-version'],
     registry: values.registry,
+    bins,
   })
 
   console.log('\nReady to publish or test:')
-  console.log(`  1. Local test: cd ${res.outDir} && bun link`)
-  console.log(`  2. Publish:    cd ${res.outDir} && bun publish (or npm publish --access public)`)
+  console.log(`  1. Local test: bun add -g ${res.outDir}`)
+  console.log(`  2. Publish:    cd ${res.outDir} && bun publish --access public`)
 }
