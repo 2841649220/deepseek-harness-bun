@@ -40,44 +40,33 @@ DeepSeek Harness 处于 _开发者预览_ 阶段，正在快速迭代。**未来
 
 ### 通过 Bun 运行
 
-#### 1. 免安装使用 `bunx`
+#### 1. 从 GitHub Packages 安装（默认渠道）
 
-无需克隆代码或全局安装，直接通过 `bunx` 唤起（包名 `dsh_bun`，下划线）：
-
-```sh
-export DEEPSEEK_API_KEY="sk-..."
-bunx dsh_bun --profile headless "task"
-```
-
-#### 2. 全局安装为命令行工具
-
-通过 Bun 全局安装：
+包发布在 GitHub Packages 上，tag 为 `rc`，同时打有 `latest`。它要求带 token 的认证（公开包也一样），而且 `bunx` 只读用户级 `~/.npmrc`——项目里的 `.npmrc` 或 `bunfig.toml` 对它无效：
 
 ```sh
-bun add -g dsh_bun
-```
-
-安装后可调用 `dsh-bun`（打包脚本默认只声明该命令，避免与已发布的 `@deepseek-ai/dsh` 的 `dsh` 命令互相遮蔽；需要时用 `--with-dsh-bin` 追加）：
-
-```sh
-export DEEPSEEK_API_KEY="sk-..."
-dsh-bun --profile headless "task"
-dsh-bun --profile web
-```
-
-#### 3. 从 GitHub Packages 安装
-
-包同时发布到 GitHub Packages（tag 为 `rc`）。GitHub Packages 要求带 token 的认证，即使是公开包：
-
-```sh
-# ~/.npmrc
+# ~/.npmrc (on Windows: C:\Users\<you>\.npmrc)
 @2841649220:registry=https://npm.pkg.github.com
 //npm.pkg.github.com/:_authToken=<YOUR_GITHUB_TOKEN>
-
-bun add -g @2841649220/dsh_bun@rc
 ```
 
-#### 4. 从 GitHub Release 安装（不经过 registry）
+只配好 registry 还不够：缺少 registry 配置时 `bunx` 会去默认 registry（例如 `registry.npmmirror.com`）找包并返回 404；若 Bun 是 npm 装的，它只提供 `bun`、`bun.cmd`、`bun.ps1`，命令还会报 `bun is not installed in %PATH%`，需要把真实解释器目录加入 `PATH`：
+
+```powershell
+$env:PATH = "$env:APPDATA\npm\node_modules\bun\bin;$env:PATH"
+```
+
+然后安装并运行：
+
+```sh
+export DEEPSEEK_API_KEY="sk-..."
+bun add -g @2841649220/dsh_bun
+bunx @2841649220/dsh_bun --profile headless "task"
+```
+
+`dsh-bun --profile headless "task"` 与 `dsh-bun --profile web` 在全局安装后同样可用。打包脚本默认只声明 `dsh-bun` 一个命令，避免与已发布的 `@deepseek-ai/dsh` 的 `dsh` 互相遮蔽；需要时用 `--with-dsh-bin` 追加。
+
+#### 2. 从 GitHub Release 安装（不经过 registry）
 
 发布包里同时附带打包好的 tarball，可直接安装，无需任何 registry：
 
@@ -86,7 +75,7 @@ bun add -g https://github.com/2841649220/deepseek-harness-bun/releases/download/
 dsh-bun --version
 ```
 
-#### 5. 源码本地调试与开发
+#### 3. 源码本地调试与开发
 
 安装 [Bun](https://bun.sh/)（v1.1.0 或更高版本），克隆仓库后直接运行源码：
 
@@ -101,7 +90,7 @@ bun run apps/cli/src/bin.ts web --no-open --port 3080
 bun run dsh:bun --profile headless "task"
 ```
 
-#### 6. 打包并发布
+#### 4. 打包并发布
 
 打包脚本把已构建的 CLI 及其依赖解析暂存到 `dist/dsh_bun`：
 

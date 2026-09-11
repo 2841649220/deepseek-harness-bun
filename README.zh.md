@@ -40,44 +40,33 @@ Review the [safety notice](SAFETY.zh.md) before running the project.
 
 ### Run with Bun
 
-#### 1. Instant execution with `bunx`
+#### 1. Install from GitHub Packages (the published channel)
 
-The staged package is published as `dsh_bun` (underscore; the hyphenated unscoped name belongs to another publisher):
-
-```sh
-export DEEPSEEK_API_KEY="sk-..."
-bunx dsh_bun --profile headless "task"
-```
-
-#### 2. Global CLI installation
-
-Install globally via Bun:
+The package is published to GitHub Packages under the `rc` tag, and carries `latest` as well. It requires token authentication even though it is public, and `bunx` reads only the user-level `~/.npmrc` — a project `.npmrc` or `bunfig.toml` has no effect on it:
 
 ```sh
-bun add -g dsh_bun
-```
-
-The staged package declares the `dsh-bun` command by default. It does not claim `dsh`, which would shadow the published `@deepseek-ai/dsh` command according to PATH order; pass `--with-dsh-bin` at staging time to add that alias:
-
-```sh
-export DEEPSEEK_API_KEY="sk-..."
-dsh-bun --profile headless "task"
-dsh-bun --profile web
-```
-
-#### 3. Install from GitHub Packages
-
-The package is also published to GitHub Packages under the `rc` tag. GitHub Packages requires token authentication even for a public package:
-
-```sh
-# ~/.npmrc
+# ~/.npmrc (on Windows: C:\Users\<you>\.npmrc)
 @2841649220:registry=https://npm.pkg.github.com
 //npm.pkg.github.com/:_authToken=<YOUR_GITHUB_TOKEN>
-
-bun add -g @2841649220/dsh_bun@rc
 ```
 
-#### 4. Install from a GitHub Release (no registry involved)
+The registry entry alone is not enough. Without it `bunx` looks in the default registry (for example `registry.npmmirror.com`) and returns 404, and an npm-installed Bun exposes only `bun`, `bun.cmd`, and `bun.ps1`, so the command also reports `bun is not installed in %PATH%`; put the real interpreter directory on `PATH`:
+
+```powershell
+$env:PATH = "$env:APPDATA\npm\node_modules\bun\bin;$env:PATH"
+```
+
+Then install and run it:
+
+```sh
+export DEEPSEEK_API_KEY="sk-..."
+bun add -g @2841649220/dsh_bun
+bunx @2841649220/dsh_bun --profile headless "task"
+```
+
+After a global install, `dsh-bun --profile headless "task"` and `dsh-bun --profile web` work the same way. The staging script declares the `dsh-bun` command only, because claiming `dsh` would shadow the published `@deepseek-ai/dsh` command according to PATH order; `--with-dsh-bin` adds that alias.
+
+#### 2. Install from a GitHub Release (no registry involved)
 
 Each release also carries the packed tarball, which installs without any registry:
 
@@ -86,7 +75,7 @@ bun add -g https://github.com/2841649220/deepseek-harness-bun/releases/download/
 dsh-bun --version
 ```
 
-#### 5. Run directly from source
+#### 3. Run directly from source
 
 Install [Bun](https://bun.sh/) (v1.1.0 or higher), clone the repository and run directly:
 
@@ -101,7 +90,7 @@ Or using the configured npm script in `package.json`:
 bun run dsh:bun --profile headless "task"
 ```
 
-#### 6. Package and publish
+#### 4. Package and publish
 
 The stage copies the built CLI and resolves its dependencies into `dist/dsh_bun`:
 
