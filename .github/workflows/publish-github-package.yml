@@ -9,9 +9,13 @@ permissions:
   contents: read
   packages: write
 
+# The staged distribution resolves the packages whose published code aborts under
+# Bun to this scope's patched forks (`PATCHED_PACKAGES` in
+# `scripts/prepare-bun-package.ts`), so the fork publishes before the wrapper that
+# names it.
 jobs:
   publish:
-    name: Build & publish the Bun package to GitHub Packages
+    name: Build & publish the Bun distribution to GitHub Packages
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -32,20 +36,36 @@ jobs:
       - name: Reject a version the registry already carries
         run: |
           version="$(node -p "require('./apps/cli/package.json').version")"
-          if npm view "@2841649220/dsh_bun${version}" version >/dev/null 2>&1; then
-            echo "::error::@2841649220/dsh_bun${version} is already published; bump the version before releasing"
-            exit 1
-          fi
+          for package in "@2841649220/dsh-code-runtime-worker-thread" "@2841649220/dsh_bun"; do
+            if npm view "${package}${version}" version >/dev/null 2>&1; then
+              echo "::error::${package}${version} is already published; bump the version before releasing"
+              exit 1
+            fi
+          done
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build libraries
         run: pnpm run build:lib
 
-      - name: Stage the Bun package
-        run: pnpm run package:bun -- --name @2841649220/dsh_bun --registry https://npm.pkg.github.com
+      - name: Stage the patched fork
+        run: pnpm run package:fork -- --registry https://npm.pkg.github.com
 
-      - name: Publish to GitHub Packages
+      - name: Publish the patched fork
+        run: |
+          cd dist/fork-code-runtime
+          npm publish --tag latest
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Stage the wrapper
+        run: >-
+          pnpm run package:bun --
+          --name @2841649220/dsh_bun
+          --registry https://npm.pkg.github.com
+          --bin dsh-bun --bin dsh --bin dsh_bun
+
+      - name: Publish the wrapper
         run: |
           cd dist/dsh_bun
           npm publish --tag rc
