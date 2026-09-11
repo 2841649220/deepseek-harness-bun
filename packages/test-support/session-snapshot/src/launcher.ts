@@ -416,6 +416,10 @@ function linkProfilePackage(source: string, cwd: string, packageName: string): v
 export function materializeProfilePatch(source: string, cwd: string, targetDir: string, index: number): string {
   let resolvedSource = source
   let content = readFileSync(source, 'utf8')
+  // A Git symlink checked out on a filesystem without symlink support (Windows
+  // without Developer Mode) is a one-line relative path; follow it so the patch
+  // parses as the entry list it points at. verify-cordis-config applies the same
+  // rule to shipped config files.
   if ((content.startsWith('./') || content.startsWith('../')) && !content.includes('\n')) {
     const target = resolve(dirname(source), content.trim())
     if (existsSync(target)) {

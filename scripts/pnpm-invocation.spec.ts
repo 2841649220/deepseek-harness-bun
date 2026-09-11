@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { pnpmInvocation } from './pnpm-invocation.ts'
 
 describe('pnpm invocation', () => {
@@ -26,8 +26,17 @@ describe('pnpm invocation', () => {
     })
   })
 
-  it.each([undefined, ''])('rejects an unavailable lifecycle entrypoint', (entrypoint) => {
-    expect(() => pnpmInvocation([], { npm_execpath: entrypoint }))
-      .toThrow('npm_execpath is unavailable; invoke the script through pnpm run')
+  it.each([undefined, ''])('falls back to the pnpm on PATH when the lifecycle entrypoint is %j', (entrypoint) => {
+    const notice = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    try {
+      expect(pnpmInvocation(['run', 'build'], { npm_execpath: entrypoint })).toEqual({
+        command: process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
+        args: ['run', 'build'],
+      })
+      expect(notice).toHaveBeenCalledWith('pnpm invocation: npm_execpath is unavailable; running '
+        + (process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm') + ' from PATH\n')
+    } finally {
+      notice.mockRestore()
+    }
   })
 })

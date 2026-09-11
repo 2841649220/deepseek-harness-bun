@@ -60,6 +60,9 @@ export function repositoryCommitHash(root: string, environment: NodeJS.ProcessEn
         stdio: ['ignore', 'pipe', 'ignore'],
       }).trim()
     } catch {
+      // A tarball or export workspace carries no Git metadata; the hash only
+      // labels the build, so it degrades to the placeholder and says so.
+      process.stderr.write(`${CLIENT_COMMIT_HASH_VARIABLE}: no Git checkout under ${root}; recording the placeholder commit\n`)
       value = '0000000'
     }
   }

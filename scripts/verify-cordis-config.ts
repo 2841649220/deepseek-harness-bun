@@ -57,6 +57,15 @@ const CHOOSER_BACKEND_PACKAGES = [
 const errors: string[] = []
 const pluginReferences: PluginReference[] = []
 
+/**
+ * Read one config file, following a Git symlink that a checkout without symlink
+ * support materialized as a text file: `core.symlinks=false` (Windows without
+ * Developer Mode) leaves a one-line relative path where the repository stores a
+ * symlink. The snapshot launcher applies the same rule to authored profile
+ * patches.
+ * @param absPath - absolute path of the config file.
+ * @returns the file's own contents, or those of the path it points at.
+ */
 function readConfigFile(absPath: string): string {
   let content = readFileSync(absPath, 'utf8')
   if ((content.startsWith('./') || content.startsWith('../')) && !content.includes('\n')) {

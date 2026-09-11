@@ -17,6 +17,10 @@ export function pnpmInvocation(
     }
     return { command: entrypoint, args: [...args] }
   }
-  const defaultCmd = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
-  return { command: defaultCmd, args: [...args] }
+  // A script run outside a package-manager lifecycle (a direct `bun run` or
+  // `node` invocation of a build entry) has no entrypoint to reuse; the pnpm on
+  // PATH is then the only candidate, and naming it keeps the substitution visible.
+  const fallback = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
+  process.stderr.write(`pnpm invocation: npm_execpath is unavailable; running ${fallback} from PATH\n`)
+  return { command: fallback, args: [...args] }
 }
