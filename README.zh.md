@@ -13,9 +13,20 @@ Documentation: [https://deepseek-harness.github.io/deepseek-harness/](https://de
 ## Additions in this Repository
 
 - **Direct execution with Bun**: Run the CLI source and built-in profiles directly using Bun.
-- **Bun packaging pipeline**: Includes a `pnpm run package:bun` script to resolve workspace dependencies and inject the Bun shebang for distribution via `bun add -g` or `bunx`.
+- **Bun packaging pipeline**: `pnpm run package:bun` resolves the workspace dependency versions, injects the Bun shebang, and stages a publishable `dsh_bun` package.
 - **Cross-platform fixes**: Resolved Windows symlink and config verification issues.
 - **Node.js compatibility preserved**: Full compatibility with the existing Node.js and pnpm workflows is retained.
+
+## Before Running on Bun
+
+Install Bun with the [official installer](https://bun.sh/docs/installation) so that `bun.exe` (Windows) or `bun` resolves on `PATH`. An npm-installed Bun exposes only `bun`, `bun.cmd`, and `bun.ps1`, and the `dsh-bun` launcher generated at install time looks the interpreter up by name — it reports `bun is not installed in %PATH%` otherwise.
+
+Source execution, the built artifacts, an installed staged package, the Web UI, and a headless task were each verified on Bun 1.4.2. The repository declares Bun 1.1.0 as its floor.
+
+### Differences from Node.js
+
+- **Live patch reload works only on Node**: a `patchReload: live` profile (the shipped `web` profile) needs Node's internal module loader to back the HMR service, which Bun does not expose. The profile still boots, but `cordis.patch.yml` edits land on the next boot, and boot prints one notice on stderr.
+- **Non-erasable TypeScript syntax**: `enum` and its kin are a program failure under Node's strip-only mode and run under Bun's full transform; keep type syntax erasable for code that must behave the same on both.
 
 ## Developer preview
 
@@ -31,27 +42,27 @@ Review the [safety notice](SAFETY.zh.md) before running the project.
 
 #### 1. Instant execution with `bunx`
 
-Run directly with `bunx`:
+The staged package is published as `dsh_bun` (underscore; the hyphenated unscoped name belongs to another publisher):
 
 ```sh
 export DEEPSEEK_API_KEY="sk-..."
-bunx dsh-bun --profile headless "task"
+bunx dsh_bun --profile headless "task"
 ```
 
 #### 2. Global CLI installation
 
-Install `dsh-bun` globally via Bun:
+Install globally via Bun:
 
 ```sh
-bun add -g dsh-bun
+bun add -g dsh_bun
 ```
 
-After installation, both `dsh` and `dsh-bun` commands are available in PATH:
+The staged package declares the `dsh-bun` command by default. It does not claim `dsh`, which would shadow the published `@deepseek-ai/dsh` command according to PATH order; pass `--with-dsh-bin` at staging time to add that alias:
 
 ```sh
 export DEEPSEEK_API_KEY="sk-..."
-dsh --profile headless "task"
-dsh --profile web
+dsh-bun --profile headless "task"
+dsh-bun --profile web
 ```
 
 #### 3. Run directly from source
@@ -60,7 +71,7 @@ Install [Bun](https://bun.sh/) (v1.1.0 or higher), clone the repository and run 
 
 ```sh
 bun run apps/cli/src/bin.ts --profile headless "task"
-bun run apps/cli/src/bin.ts --profile web-clean --port 3080
+bun run apps/cli/src/bin.ts web --no-open --port 3080
 ```
 
 Or using the configured npm script in `package.json`:
@@ -69,14 +80,17 @@ Or using the configured npm script in `package.json`:
 bun run dsh:bun --profile headless "task"
 ```
 
-#### 4. Package and publish for Bun
+#### 4. Package and publish
 
-Stage the compiled CLI and resolve workspace dependencies into `dist/dsh-bun`:
+The stage copies the built CLI and resolves its dependencies into `dist/dsh_bun`:
 
 ```sh
+pnpm run build          # the stage requires apps/cli/lib to exist
 pnpm run package:bun
-cd dist/dsh-bun && bun publish --access public
+cd dist/dsh_bun && bun publish --access public
 ```
+
+Other flags: `--name <package>`, `--out <dir>`, `--registry <registry>`, `--dep-version <range>` (override every `workspace:` range when publishing against a version the registry does not carry yet), and `--with-dsh-bin`.
 
 <a id="run-from-source"></a>
 

@@ -13,9 +13,20 @@ DeepSeek Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的�
 ## 本仓库新增特性
 
 - **支持 Bun 运行时直接执行**：支持使用 Bun 直接运行 CLI 源码与内置 Profile。
-- **提供 Bun 打包流水线**：提供 `pnpm run package:bun` 脚本，自动处理工作区依赖并注入 Bun Shebang，便于通过 `bun add -g` 或 `bunx` 分发。
+- **提供 Bun 打包流水线**：提供 `pnpm run package:bun` 脚本，自动解析工作区依赖版本并注入 Bun shebang，产出可发布的 `dsh_bun` 包。
 - **跨平台修复**：修复了 Windows 环境下的符号链接兼容性及配置检查问题。
 - **保持 Node.js 兼容**：保留对原有 Node.js / pnpm 工作流的完整兼容。
+
+## Bun 运行前的准备
+
+Bun 必须用[官方安装方式](https://bun.sh/docs/installation)安装，使 `bun.exe`（Windows）或 `bun` 位于 `PATH` 中。用 npm 安装的 Bun 只提供 `bun`、`bun.cmd`、`bun.ps1`，包安装后生成的 `dsh-bun` 启动器按名称查找解释器，在上述情况下会报 `bun is not installed in %PATH%`。
+
+已在 Bun 1.4.2 上验证源码运行、构建产物运行、打包安装运行、Web UI 与 headless 任务。仓库声明的下限为 Bun 1.1.0。
+
+### 与 Node.js 的行为差异
+
+- **实时 patch 重载只在 Node 下生效**：`patchReload: live` 的 profile（随附的 `web`）依赖 Node 内部模块加载器支撑 HMR 服务，Bun 不提供该能力。此时 profile 正常启动，但 `cordis.patch.yml` 的编辑在下次启动时才生效，启动时会在 stderr 打印一条提示。
+- **不可擦除的 TypeScript 语法**：程序里的 `enum` 等在 Node 的仅剥离模式下是程序失败，在 Bun 的完整转译下可运行；需要跨运行时一致的代码请保持类型语法可擦除。
 
 ## 开发者预览
 
@@ -31,27 +42,27 @@ DeepSeek Harness 处于 _开发者预览_ 阶段，正在快速迭代。**未来
 
 #### 1. 免安装使用 `bunx`
 
-无需克隆代码或全局安装，直接通过 `bunx` 唤起：
+无需克隆代码或全局安装，直接通过 `bunx` 唤起（包名 `dsh_bun`，下划线）：
 
 ```sh
 export DEEPSEEK_API_KEY="sk-..."
-bunx dsh-bun --profile headless "task"
+bunx dsh_bun --profile headless "task"
 ```
 
 #### 2. 全局安装为命令行工具
 
-通过 Bun 全局安装 `dsh-bun`：
+通过 Bun 全局安装：
 
 ```sh
-bun add -g dsh-bun
+bun add -g dsh_bun
 ```
 
-安装后，`dsh` 与 `dsh-bun` 两个可执行命令均可直接调用：
+安装后可调用 `dsh-bun`（打包脚本默认只声明该命令，避免与已发布的 `@deepseek-ai/dsh` 的 `dsh` 命令互相遮蔽；需要时用 `--with-dsh-bin` 追加）：
 
 ```sh
 export DEEPSEEK_API_KEY="sk-..."
-dsh --profile headless "task"
-dsh --profile web
+dsh-bun --profile headless "task"
+dsh-bun --profile web
 ```
 
 #### 3. 源码本地调试与开发
@@ -60,7 +71,7 @@ dsh --profile web
 
 ```sh
 bun run apps/cli/src/bin.ts --profile headless "task"
-bun run apps/cli/src/bin.ts --profile web-clean --port 3080
+bun run apps/cli/src/bin.ts web --no-open --port 3080
 ```
 
 或者使用 `package.json` 中配置的便捷脚本：
@@ -69,14 +80,17 @@ bun run apps/cli/src/bin.ts --profile web-clean --port 3080
 bun run dsh:bun --profile headless "task"
 ```
 
-#### 4. 打包并发布为 Bun 原生包
+#### 4. 打包并发布
 
-运行自动化打包流水线，将 CLI 连同其依赖解析打包至 `dist/dsh-bun`：
+打包脚本把已构建的 CLI 及其依赖解析暂存到 `dist/dsh_bun`：
 
 ```sh
+pnpm run build          # the stage requires apps/cli/lib to exist
 pnpm run package:bun
-cd dist/dsh-bun && bun publish --access public
+cd dist/dsh_bun && bun publish --access public
 ```
+
+可选项：`--name <包名>`、`--out <目录>`、`--registry <registry>`、`--dep-version <范围>`（发布尚未进入 registry 的版本时统一覆盖 `workspace:` 依赖范围）、`--with-dsh-bin`。
 
 <a id="run-from-source"></a>
 
