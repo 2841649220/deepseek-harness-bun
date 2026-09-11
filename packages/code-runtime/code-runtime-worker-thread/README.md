@@ -84,7 +84,7 @@ Model code can reach `parentPort` and forge traffic, so every inbound message is
 
 ### Budgets
 
-Two independent budgets exist because the peer is hostile: `computeMs` meters the worker's measured busy time (`eventLoopUtilization()` polling every 25 ms), so a hot loop expires it whether or not a decoy dispatch is in flight, while a program idling on a slow binding accrues nothing; `maxWallMs` backstops what busy time cannot see, such as a promise nobody resolves. Both funnel into `worker.terminate()`. `maxWallMs` is range-checked at load against `MAX_TIMER_DELAY_MS` because `setTimeout` clamps a longer delay to 1 ms.
+Two independent budgets exist because the peer is hostile: `computeMs` meters the worker's measured busy time (`eventLoopUtilization()` polling every 25 ms), so a hot loop expires it whether or not a decoy dispatch is in flight, while a program idling on a slow binding accrues nothing; `maxWallMs` backstops what busy time cannot see, such as a promise nobody resolves. The busy-time read is a runtime capability: a runtime that does not implement it — Bun's `worker.performance.eventLoopUtilization` is a stub that measures nothing — gets no poll at all, one stderr notice naming both budgets, and `maxWallMs` as its only ceiling, rather than a metered budget that silently never expires. Both funnel into `worker.terminate()`. `maxWallMs` is range-checked at load against `MAX_TIMER_DELAY_MS` because `setTimeout` clamps a longer delay to 1 ms.
 
 ### Output ledger
 
@@ -140,6 +140,7 @@ These limits define when the backend is a poor fit or needs special operational 
 
 - **OS processes a program spawns survive termination** — `worker.terminate()` ends the thread only, weaker than bash-local's process-group kill; orphan cleanup is a deployment concern until a container backend exists.
 - **Type-strip rides a runtime capability, not one API** — Node's experimental `stripTypeScriptTypes` (amaro or sucrase are the named drop-in replacements if its behavior shifts) or Bun's transpiler, which is a full TypeScript transform rather than a strip: non-erasable syntax such as `enum` is a program failure on Node and a runnable program under Bun.
+- **`computeMs` is unenforceable under Bun** — that runtime reports no worker busy time, so a run is bounded by `maxWallMs` alone; deployments that need busy-time containment must run Node.
 - **`computeMs` expiry can overshoot by up to one poll interval** — busy time is sampled every 25 ms (an internal constant, deliberately not config).
 - **Programs get a five-method `console` shim** (`log`/`info`/`warn`/`error`/`debug`) — deliberately not Node's full console API.
 - **Intermediate binding values have no byte cap** — a program can exhaust process or worker memory with a value that never becomes outer output.

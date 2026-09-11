@@ -30,7 +30,9 @@ export interface Config {
    * measured busy time — not wall time, not host-side pending-call
    * bookkeeping — is what makes the budget both fair (a program awaiting a
    * slow tool accrues nothing) and ungameable (a hot loop accrues whether
-   * or not a decoy dispatch is in flight).
+   * or not a decoy dispatch is in flight). A runtime that cannot report
+   * that time cannot enforce this budget: it says so once on stderr and
+   * {@link Config.maxWallMs} becomes a run's only ceiling.
    */
   computeMs?: number
   /**
@@ -238,6 +240,8 @@ export class WorkerThreadCodeRuntime extends CodeRuntime {
   private readonly config: ResolvedConfig
   private readonly live = new Set<LiveRun>()
   private disposed = false
+  /** Whether this runtime can meter a worker's busy time; probed on the first run. */
+  private busyTimeMetered: boolean | undefined
 
   constructor(ctx: Context, config: Config) {
     super(ctx)
@@ -346,6 +350,51 @@ export class WorkerThreadCodeRuntime extends CodeRuntime {
       errorClassNames.add(descriptor.name)
     }
     return bindings
+  }
+
+  /**
+   * Select the busy-time meter for one worker, or undefined when this runtime
+   * cannot report a worker's busy time — a property of the runtime, probed
+   * once per service.
+   *
+   * The probe CALLS the read: Bun exposes
+   * `worker.performance.eventLoopUtilization` as a stub that returns a
+   * constant zero sample while reporting `ERR_NOT_IMPLEMENTED`, so the
+   * method's presence proves nothing — and its throw, raised from inside the
+   * poll callback, would kill the host process instead of the run.
+   * @param worker - the run's worker, whose event loop the budget meters.
+   * @returns a reader of the worker's accumulated busy milliseconds.
+   */
+  private selectBusyTime(worker: Worker): (() => number) | undefined {
+    if (this.busyTimeMetered === undefined) {
+      this.busyTimeMetered = (globalThis as { Bun?: unknown }).Bun === undefined && this.probeBusyTime(worker)
+      if (!this.busyTimeMetered) {
+        process.stderr.write(
+          'dsh-code-runtime-worker-thread: this runtime reports no worker event-loop utilization '
+          + '(worker.performance.eventLoopUtilization measures nothing under Bun); config.computeMs '
+          + `(${this.config.computeMs}ms) cannot expire a run, leaving config.maxWallMs (${this.config.maxWallMs}ms) as the ceiling\n`,
+        )
+      }
+    }
+    if (!this.busyTimeMetered) return undefined
+    return () => worker.performance.eventLoopUtilization().active
+  }
+
+  /**
+   * Call the utilization read once: a runtime can expose the method and still
+   * not implement it.
+   * @param worker - the worker whose utilization the probe reads.
+   * @returns whether the read produced a sample.
+   */
+  private probeBusyTime(worker: Worker): boolean {
+    try {
+      worker.performance.eventLoopUtilization()
+      return true
+    } catch {
+      // Only an unimplemented read reaches this; a run's every other throw is
+      // contained by execute()'s own handlers before the poll starts.
+      return false
+    }
   }
 
   /** Spawn the worker for one validated, type-stripped run and drive it to settlement. */
@@ -521,10 +570,11 @@ export class WorkerThreadCodeRuntime extends CodeRuntime {
 
       // The compute budget reads the worker's own measured busy time, so a
       // hot loop expires it no matter what dispatches are in flight, while a
-      // program idling on a slow binding accrues nothing.
-      const eluTimer = setInterval(() => {
-        const elu = worker.performance.eventLoopUtilization()
-        if (elu.active > this.config.computeMs) {
+      // program idling on a slow binding accrues nothing. A runtime that
+      // cannot report that time gets no poll at all; selectBusyTime says so.
+      const busyTime = this.selectBusyTime(worker)
+      const eluTimer = busyTime === undefined ? undefined : setInterval(() => {
+        if (busyTime() > this.config.computeMs) {
           finish(() => output.failure([...logs, ...strayLogs], { kind: 'timeout', message: `compute budget exhausted (${this.config.computeMs}ms busy)` }))
         }
       }, ELU_POLL_INTERVAL_MS)

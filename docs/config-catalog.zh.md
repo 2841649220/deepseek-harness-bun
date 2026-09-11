@@ -417,7 +417,9 @@ export interface Config {
    * measured busy time — not wall time, not host-side pending-call
    * bookkeeping — is what makes the budget both fair (a program awaiting a
    * slow tool accrues nothing) and ungameable (a hot loop accrues whether
-   * or not a decoy dispatch is in flight).
+   * or not a decoy dispatch is in flight). A runtime that cannot report
+   * that time cannot enforce this budget: it says so once on stderr and
+   * {@link Config.maxWallMs} becomes a run's only ceiling.
    */
   computeMs?: number
   /**

@@ -84,7 +84,7 @@ kind: "package-reference"
 
 ### 预算
 
-存在两个独立预算，因为对端不可信：`computeMs` 计量 worker 的实测忙碌时间（每 25 ms 轮询一次 `eventLoopUtilization()`），因此热循环无论是否有诱饵 dispatch 在途都会到期，而等待慢绑定的程序不累计；`maxWallMs` 为忙碌时间无法观测的情况兜底，例如永远不会 resolve 的 promise。二者最终都会调用 `worker.terminate()`。`maxWallMs` 在加载时对照 `MAX_TIMER_DELAY_MS` 做范围校验，因为 `setTimeout` 会把更长的延迟限制为 1 ms。
+存在两个独立预算，因为对端不可信：`computeMs` 计量 worker 的实测忙碌时间（每 25 ms 轮询一次 `eventLoopUtilization()`），因此热循环无论是否有诱饵 dispatch 在途都会到期，而等待慢绑定的程序不累计；`maxWallMs` 为忙碌时间无法观测的情况兜底，例如永远不会 resolve 的 promise。忙碌时间读取是一项运行时能力：不实现该能力的运行时——Bun 的 `worker.performance.eventLoopUtilization` 是一个不计量任何内容的桩——完全不进行轮询，只输出一条同时点名两个预算的 stderr 提示，并以 `maxWallMs` 作为唯一上限，而不是一个永远不会到期的计量预算。二者最终都会调用 `worker.terminate()`。`maxWallMs` 在加载时对照 `MAX_TIMER_DELAY_MS` 做范围校验，因为 `setTimeout` 会把更长的延迟限制为 1 ms。
 
 ### 输出账本
 
@@ -140,6 +140,7 @@ kind: "package-reference"
 
 - **程序派生的 OS 进程在程序终止后仍会存活**——`worker.terminate()` 只结束线程，比 bash-local 的进程组终止更弱；在容器后端出现前，孤儿进程清理属于部署职责。
 - **类型剥离依赖运行时能力，而非单一 API**——Node 的实验性 `stripTypeScriptTypes`（如其行为发生变化，amaro 或 sucrase 是已经点名的直接替代品），或 Bun 的转译器；后者是完整的 TypeScript 转换而非剥离：`enum` 等不可擦除语法在 Node 上是程序失败，在 Bun 上则可运行。
+- **`computeMs` 在 Bun 上无法强制执行**——该运行时不报告 worker 忙碌时间，因此运行仅由 `maxWallMs` 约束；需要忙碌时间约束的部署必须运行 Node。
 - **`computeMs` 到期最多可能超过一个轮询间隔**——系统每 25 ms 采样一次忙碌时间（内部常量，有意不做成配置）。
 - **程序获得一个含 5 个方法的 `console` shim**（`log`／`info`／`warn`／`error`／`debug`）——有意不提供 Node 的完整 console 接口。
 - **中间绑定值没有字节上限**——程序可以用永远不会成为外层输出的值耗尽进程或 worker 内存。

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-11-bun-runtime-support.md
-2026-09-11-bun-runtime-support.md: 323ddc5030c2f4c5c42b9cad0900c1f49172a93f
-2026-09-11-bun-runtime-support.zh.md: 4751957231b706a959853283e55a0790168b70ca
+2026-09-11-bun-runtime-support.md: 000ae1ac15ccc951fa829d1f2344f831cc2c120a
+2026-09-11-bun-runtime-support.zh.md: b7f23eb1eb13a1dad2179b219c4aa213089aacfc

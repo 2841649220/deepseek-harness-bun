@@ -8,12 +8,13 @@ Status: implemented
 
 DeepSeek Harness 面向 Node.js（`^22.19.0 || >=24.0.0`）设计，并依赖若干 Node 专属能力：`@deepseek-ai/dsh-code-runtime-worker-thread` 用 `node:module.stripTypeScriptTypes` 在进程内执行 TypeScript，`apps/cli/src/profile-boot.ts` 通过 Node 内部模块加载器（经 `node-addon-require-builtin`）支撑 Cordis HMR。
 
-在 Bun（1.1.0 以上）下启动会在四处失败：
+在 Bun（1.1.0 以上）下启动会在五处失败：
 
 1. `SyntaxError: The requested module 'node:module' does not provide an export named 'stripTypeScriptTypes'`——Bun 的 `node:module` 命名空间没有 `stripTypeScriptTypes` 具名导出，仅静态导入就会中止模块求值。
 2. Cordis HMR 尝试绑定 Bun 并不提供的 Node 内部模块加载器。
 3. Bun 启动更快，Web carrier 的路由注册与服务读取发生竞态。
 4. Windows 启动器 shim 被当作原生 Win32 可执行文件调用时失败。
+5. `NotImplementedError: worker_threads.Worker.performance is not yet implemented in Bun`——worker 计算预算的利用率轮询在定时器回调内抛出，该异常会杀死宿主进程，而不是让该次运行失败。
 
 ## 决策
 
@@ -24,6 +25,7 @@ DeepSeek Harness 面向 Node.js（`^22.19.0 || >=24.0.0`）设计，并依赖若
 3. **按能力读取 Web carrier 注册**——`dsh-client-modules` 对已提供的上下文改用 `webCtx.get('webServer')` 解析 Web 服务，同时保留 `ctx.inject(['webServer'], ...)` 处理延迟挂载。
 4. **与运行时无关的包管理器查找**——`scripts/pnpm-invocation.ts` 在缺少 `npm_execpath`（直接用 `bun run` 或 `node` 运行脚本）时回退到 `PATH` 上的 `pnpm` 或 `pnpm.cmd`，并在 stderr 上说明该回退。
 5. **Git 元数据容错**——`scripts/client-build-environment.ts` 对没有 Git 仓库的工作区记录占位提交哈希，并在 stderr 上说明。
+6. **忙碌时间能力探测**——`code-runtime-worker-thread` 在轮询之前，对每个服务调用一次 `worker.performance.eventLoopUtilization()`；当运行时不报告 worker 忙碌时间时完全跳过轮询。运行时可以暴露该方法却并未实现它：Bun 的桩返回恒为零的样本并报告 `ERR_NOT_IMPLEMENTED`。被跳过的轮询会连同两个已配置预算一起向 stderr 写出一次提示，因为无法让运行到期的 `computeMs` 绝不能悄然失效；`maxWallMs` 仍是该次运行的上限。
 
 ## 考虑过的替代方案
 
@@ -36,4 +38,5 @@ DeepSeek Harness 面向 Node.js（`^22.19.0 || >=24.0.0`）设计，并依赖若
 - DeepSeek Harness 可在 `PATH` 中没有任何 Node 可执行文件的情况下于 Bun 下启动运行：源码入口、构建产物 bin、暂存包、Web UI 与 headless 任务均已与同一次 Node 运行对照验证（Bun 1.4.2）。
 - 能力缺口并不均一，且每一处都有明确归属：使用不可擦除 TypeScript 语法（例如 `enum`）的程序在 Node 的仅剥离模式下失败、在 Bun 的完整转换下可运行，因此程序只有保持可擦除才可移植；`patchReload: live` profile 在 Bun 下的 patch 编辑于下次启动生效，并在启动时给出提示；打包后的命令名与其分发渠道记录在 `README.md`。
 - 不提供剥离能力的运行时，或像 Bun 这样 `node:module` 没有 `stripTypeScriptTypes` 的运行时，会得到程序失败的结果，而不是在模块求值阶段整体抛错。
+- 在 Bun 下没有任何运行受忙碌时间约束——运行时不报告该时间——因此 `maxWallMs` 是唯一上限，harness 会在首次运行时说明这一点。需要忙碌时间约束的部署应运行 Node。
 - Node.js 22.19、24、26 保持原有行为。
