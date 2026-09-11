@@ -363,11 +363,21 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
       // cordis.patch.yml edits stay live without replacing source modules. A
       // silent skip would break the documented reload contract. HMR injects
       // the timer service, which a bare custom profile may not mount either.
-      if (ctx.get('hmr') === undefined && (ctx.loader as { internal?: unknown }).internal !== undefined) {
+      const loaderInternals = (ctx.loader as { internal?: unknown }).internal !== undefined
+      if (ctx.get('hmr') === undefined && loaderInternals) {
         if (ctx.get('timer') === undefined) {
           await ctx.loader.create({ name: '@deepseek-ai/cordis-plugin-timer' })
         }
         await ctx.loader.create({ name: '@deepseek-ai/cordis-plugin-hmr', config: { root: [] } })
+      }
+      if (ctx.get('hmr') === undefined) {
+        // Bun and any runtime without Node's internal module loader cannot back
+        // the HMR service. The profile still boots; only the live layer is gone,
+        // so the operator learns it here instead of wondering why an edit did nothing.
+        process.stderr.write(
+          `${NAME}: live patch reload is unavailable on this runtime (no Node internal module loader); `
+          + `edits to ${composed.profile.patchPath} apply on the next boot\n`,
+        )
       }
       if (ctx.get('hmr') !== undefined) {
         await watchUserPatches(ctx, {
