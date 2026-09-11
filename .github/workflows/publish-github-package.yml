@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   publish:
-    name: Build & Publish Bun package to GitHub Packages
+    name: Build & publish the Bun package to GitHub Packages
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -29,15 +29,25 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Reject a version the registry already carries
+        run: |
+          version="$(node -p "require('./apps/cli/package.json').version")"
+          if npm view "@2841649220/dsh_bun${version}" version >/dev/null 2>&1; then
+            echo "::error::@2841649220/dsh_bun${version} is already published; bump the version before releasing"
+            exit 1
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build libraries
         run: pnpm run build:lib
 
-      - name: Stage Bun package
-        run: pnpm run package:bun -- --name @2841649220/dsh-bun --registry https://npm.pkg.github.com
+      - name: Stage the Bun package
+        run: pnpm run package:bun -- --name @2841649220/dsh_bun --registry https://npm.pkg.github.com
 
       - name: Publish to GitHub Packages
         run: |
-          cd dist/dsh-bun
+          cd dist/dsh_bun
           npm publish --tag rc
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
