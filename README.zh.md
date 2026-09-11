@@ -1,33 +1,21 @@
-# DeepSeek Harness (Bun Edition)
+# DeepSeek Harness (Bun Support)
 
 English | [中文](README.md)
 
 DeepSeek Harness (`dsh`) is an open-source agent harness developed by [DeepSeek AI](https://deepseek.com).
 
-This repository is a high-performance edition natively adapted for the **Bun runtime (Bun v1.1.0+ / v1.4.2+)**. Through runtime capability detection and graceful degradation, it achieves **100% independent execution without Node.js**, a **2.6x faster** cold startup latency, ~**28% lower** baseline memory usage, while retaining full backward compatibility with Node.js.
+This repository adds compatibility support for the **Bun runtime** on top of the official release, allowing the CLI to run directly with Bun and providing tools to package and publish it as a Bun-compatible package.
 
 It is built on an **everything-is-a-plugin** architecture and powered by [Cordis](https://github.com/cordiverse/cordis), whose design is described in [_A Programming Paradigm for Spatiotemporal Composability_](https://arxiv.org/abs/2608.25512).
 
 Documentation: [https://deepseek-harness.github.io/deepseek-harness/](https://deepseek-harness.github.io/deepseek-harness/)
 
-## Core Features & Highlights
+## Additions in this Repository
 
-- **Blazing Fast Cold Startup (2.6x Speedup)**: Leveraging Bun's modern Rust-based native architecture, built-in instant TypeScript transpilation, and fast module cache, CLI startup latency dropped from ~240ms to ~90ms, and Profile resolution latency dropped from ~275ms to ~105ms.
-- **Lower Memory Footprint (~28% Saved)**: Baseline CLI memory dropped from 66 MB RSS to 47 MB RSS, reducing system overhead in concurrent multi-agent tasks and long sessions.
-- **Pure Bun Zero-Dependency Execution**: Verified by physical environment isolation—completely removing Node.js from PATH still seamlessly runs 80+ plugins, agent tasks, and Web console services.
-- **Dual-Engine Seamless Compatibility**: 100% compatibility with Node.js 22.19 / 24 / 26 is preserved, passing all official unit tests.
-
-## Performance Benchmarks
-
-Measured on Windows 11 x64, Node.js v24.13.0 (+ tsx/esm) vs Bun v1.4.2 over 5 benchmark rounds:
-
-| Test Scenario | Node.js 24 + tsx | Bun v1.4.2 Native | Speedup |
-| :--- | :--- | :--- | :--- |
-| **CLI Cold Startup (`--help`)** | 240.9 ms | **89.4 ms** | **2.69x (169% faster)** |
-| **Headless Profile Resolution (30+ plugins)** | 272.5 ms | **105.2 ms** | **2.59x (159% faster)** |
-| **Web Profile Resolution (80+ plugins)** | 274.6 ms | **107.3 ms** | **2.56x (156% faster)** |
-| **Baseline Memory (CLI Base RSS)** | 66.3 MB | **46.9 MB** | **29.3% lower** |
-| **Active Memory (Headless Profile RSS)** | 67.1 MB | **48.8 MB** | **27.3% lower** |
+- **Direct execution with Bun**: Run the CLI source and built-in profiles directly using Bun.
+- **Bun packaging pipeline**: Includes a `pnpm run package:bun` script to resolve workspace dependencies and inject the Bun shebang for distribution via `bun add -g` or `bunx`.
+- **Cross-platform fixes**: Resolved Windows symlink and config verification issues.
+- **Node.js compatibility preserved**: Full compatibility with the existing Node.js and pnpm workflows is retained.
 
 ## Developer preview
 
@@ -39,11 +27,11 @@ Review the [safety notice](SAFETY.zh.md) before running the project.
 
 ## Run
 
-### Run with Bun (Recommended)
+### Run with Bun
 
-#### 1. Instant execution with `bunx` (Fastest)
+#### 1. Instant execution with `bunx`
 
-Run directly without cloning or global installation:
+Run directly with `bunx`:
 
 ```sh
 export DEEPSEEK_API_KEY="sk-..."
