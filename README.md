@@ -65,7 +65,19 @@ dsh-bun --profile headless "task"
 dsh-bun --profile web
 ```
 
-#### 3. 从 GitHub Release 安装（不经过 registry）
+#### 3. 从 GitHub Packages 安装
+
+包同时发布到 GitHub Packages（tag 为 `rc`）。GitHub Packages 要求带 token 的认证，即使是公开包：
+
+```sh
+# ~/.npmrc
+@2841649220:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=<YOUR_GITHUB_TOKEN>
+
+bun add -g @2841649220/dsh_bun@rc
+```
+
+#### 4. 从 GitHub Release 安装（不经过 registry）
 
 发布包里同时附带打包好的 tarball，可直接安装，无需任何 registry：
 
@@ -74,7 +86,7 @@ bun add -g https://github.com/2841649220/deepseek-harness-bun/releases/download/
 dsh-bun --version
 ```
 
-#### 4. 源码本地调试与开发
+#### 5. 源码本地调试与开发
 
 安装 [Bun](https://bun.sh/)（v1.1.0 或更高版本），克隆仓库后直接运行源码：
 
@@ -89,7 +101,7 @@ bun run apps/cli/src/bin.ts web --no-open --port 3080
 bun run dsh:bun --profile headless "task"
 ```
 
-#### 5. 打包并发布
+#### 6. 打包并发布
 
 打包脚本把已构建的 CLI 及其依赖解析暂存到 `dist/dsh_bun`：
 

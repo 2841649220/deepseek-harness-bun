@@ -65,7 +65,19 @@ dsh-bun --profile headless "task"
 dsh-bun --profile web
 ```
 
-#### 3. Install from a GitHub Release (no registry involved)
+#### 3. Install from GitHub Packages
+
+The package is also published to GitHub Packages under the `rc` tag. GitHub Packages requires token authentication even for a public package:
+
+```sh
+# ~/.npmrc
+@2841649220:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=<YOUR_GITHUB_TOKEN>
+
+bun add -g @2841649220/dsh_bun@rc
+```
+
+#### 4. Install from a GitHub Release (no registry involved)
 
 Each release also carries the packed tarball, which installs without any registry:
 
@@ -74,7 +86,7 @@ bun add -g https://github.com/2841649220/deepseek-harness-bun/releases/download/
 dsh-bun --version
 ```
 
-#### 4. Run directly from source
+#### 5. Run directly from source
 
 Install [Bun](https://bun.sh/) (v1.1.0 or higher), clone the repository and run directly:
 
@@ -89,7 +101,7 @@ Or using the configured npm script in `package.json`:
 bun run dsh:bun --profile headless "task"
 ```
 
-#### 5. Package and publish
+#### 6. Package and publish
 
 The stage copies the built CLI and resolves its dependencies into `dist/dsh_bun`:
 
