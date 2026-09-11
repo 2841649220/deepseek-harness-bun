@@ -83,6 +83,7 @@ export function prepareBunPackage(options: {
   outDir?: string | undefined
   version?: string | undefined
   depVersion?: string | undefined
+  registry?: string | undefined
 } = {}): { outDir: string; packageName: string; version: string } {
   const cliPkgPath = resolve(root, 'apps/cli/package.json')
   const cliPkg = JSON.parse(readFileSync(cliPkgPath, 'utf8')) as CliPackageJson
@@ -160,6 +161,7 @@ export function prepareBunPackage(options: {
     },
     publishConfig: {
       access: 'public',
+      ...(options.registry ? { registry: options.registry } : {}),
     },
     repository: {
       type: 'git',
@@ -251,6 +253,7 @@ if (import.meta.main) {
       out: { type: 'string' },
       version: { type: 'string' },
       'dep-version': { type: 'string' },
+      registry: { type: 'string' },
     },
     allowPositionals: false,
   })
@@ -260,6 +263,7 @@ if (import.meta.main) {
     outDir: values.out,
     version: values.version,
     depVersion: values['dep-version'],
+    registry: values.registry,
   })
 
   console.log('\nReady to publish or test:')
