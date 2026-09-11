@@ -1,83 +1,92 @@
-# DeepSeek Harness
+# DeepSeek Harness (Bun Edition)
 
-[English](README.md) | 中文
+English | [中文](README.md)
 
-DeepSeek Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的开源 agent harness（智能体框架）。
+DeepSeek Harness (`dsh`) is an open-source agent harness developed by [DeepSeek AI](https://deepseek.com).
 
-它构建于**一切皆插件**的架构之上，由 [Cordis](https://github.com/cordiverse/cordis) 驱动，其设计参见论文 [_A Programming Paradigm for Spatiotemporal Composability_](https://arxiv.org/abs/2608.25512)。
+This repository is a high-performance edition natively adapted for the **Bun runtime (Bun v1.1.0+ / v1.4.2+)**. Through runtime capability detection and graceful degradation, it achieves **100% independent execution without Node.js**, a **2.6x faster** cold startup latency, ~**28% lower** baseline memory usage, while retaining full backward compatibility with Node.js.
 
-文档：[https://deepseek-harness.github.io/deepseek-harness/](https://deepseek-harness.github.io/deepseek-harness/)
+It is built on an **everything-is-a-plugin** architecture and powered by [Cordis](https://github.com/cordiverse/cordis), whose design is described in [_A Programming Paradigm for Spatiotemporal Composability_](https://arxiv.org/abs/2608.25512).
 
-## 开发者预览
+Documentation: [https://deepseek-harness.github.io/deepseek-harness/](https://deepseek-harness.github.io/deepseek-harness/)
 
-DeepSeek Harness 处于 _开发者预览_ 阶段，正在快速迭代。**未来将出现破坏兼容性的变更。**
+## Core Features & Highlights
 
-运行本项目前，请阅读[安全说明](SAFETY.zh.md)。
+- **Blazing Fast Cold Startup (2.6x Speedup)**: With Bun's native Zig/C++ TypeScript transpilation and instant module cache, CLI startup latency dropped from ~240ms to ~90ms, and Profile resolution latency dropped from ~275ms to ~105ms.
+- **Lower Memory Footprint (~28% Saved)**: Baseline CLI memory dropped from 66 MB RSS to 47 MB RSS, reducing system overhead in concurrent multi-agent tasks and long sessions.
+- **Pure Bun Zero-Dependency Execution**: Verified by physical environment isolation—completely removing Node.js from PATH still seamlessly runs 80+ plugins, agent tasks, and Web console services.
+- **Dual-Engine Seamless Compatibility**: 100% compatibility with Node.js 22.19 / 24 / 26 is preserved, passing all official unit tests.
+
+## Performance Benchmarks
+
+Measured on Windows 11 x64, Node.js v24.13.0 (+ tsx/esm) vs Bun v1.4.2 over 5 benchmark rounds:
+
+| Test Scenario | Node.js 24 + tsx | Bun v1.4.2 Native | Speedup |
+| :--- | :--- | :--- | :--- |
+| **CLI Cold Startup (`--help`)** | 240.9 ms | **89.4 ms** | **2.69x (169% faster)** |
+| **Headless Profile Resolution (30+ plugins)** | 272.5 ms | **105.2 ms** | **2.59x (159% faster)** |
+| **Web Profile Resolution (80+ plugins)** | 274.6 ms | **107.3 ms** | **2.56x (156% faster)** |
+| **Baseline Memory (CLI Base RSS)** | 66.3 MB | **46.9 MB** | **29.3% lower** |
+| **Active Memory (Headless Profile RSS)** | 67.1 MB | **48.8 MB** | **27.3% lower** |
+
+## Developer preview
+
+DeepSeek Harness is in _developer preview_ and iterating rapidly. **THERE WILL BE COMPATIBILITY-BREAKING CHANGES.**
+
+Review the [safety notice](SAFETY.zh.md) before running the project.
 
 <a id="run"></a>
 
-## 运行
+## Run
 
-### 通过 `npm` 运行
+### Run with Bun (Recommended)
 
-安装 `Node.js`，然后运行：
+Install [Bun](https://bun.sh/) (v1.1.0 or higher), then run directly:
 
 ```sh
-npx @deepseek-ai/dsh web
+bun run apps/cli/src/bin.ts --profile headless "task"
+bun run apps/cli/src/bin.ts --profile web-clean --port 3080
 ```
 
-该命令默认会在 `http://127.0.0.1:3080` 启动 Web UI，本机启动时还会用默认浏览器打开页面。通过 SSH 启动时只打印宿主机 URL，因为本地转发地址由 SSH 客户端或编辑器持有。传入 `--no-open` 可仅运行服务器而不打开浏览器。详见 [Web UI 指南](docs/user/guide/index.zh.md)。
+Or using the configured npm script in `package.json`:
+
+```sh
+bun run dsh:bun --profile headless "task"
+```
 
 <a id="run-from-source"></a>
 
-### 从源码运行
+### Run from source (Node.js / pnpm)
 
-如需从仓库源码运行：
+To run via traditional Node.js:
 
 ```sh
-git clone https://github.com/deepseek-ai/deepseek-harness.git
-cd deepseek-harness
+git clone https://github.com/2841649220/deepseek-harness-bun.git
+cd deepseek-harness-bun
 pnpm install
 pnpm run build
 pnpm dsh web
 ```
 
-`pnpm run build` 会准备仓库产物。`pnpm dsh web` 会直接使用这些已构建产物，不会重新构建。
+`pnpm run build` prepares the repository artifacts. `pnpm dsh web` uses those built artifacts without rebuilding.
 
-## 社区与支持
+## Community and support
 
-- 通过 [GitHub Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions) 提交反馈或 bug 报告。
-- 为你的插件仓库添加 [`dsh-plugin`](https://github.com/topics/dsh-plugin) 话题，便于被发现。
-- 欢迎加入 DeepSeek Harness 企微群：扫码添加企微小助手并填写入群问卷，完成后小助手会邀请你入群。
+- Submit feedback or bug reports through [GitHub Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions).
+- Add the [`dsh-plugin`](https://github.com/topics/dsh-plugin) topic to your plugin repository for discoverability.
+- Join the official community and discussions.
 
-<table>
-  <thead>
-    <tr>
-      <th align="center">企微小助手</th>
-      <th align="center">入群问卷</th>
-      <th align="center">微信公众号</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td align="center"><img src="https://cdn.deepseek.com/harness/readme/community-wecom-assistant.png" alt="DeepSeek Harness 企微小助手二维码" width="180" height="180"></td>
-      <td align="center"><a href="https://trtgsjkv6r.feishu.cn/share/base/form/shrcnIt5twSVdLGD52KJBckGCgg"><img src="https://cdn.deepseek.com/harness/readme/community-wecom-survey.png" alt="DeepSeek Harness 入群问卷二维码" width="180" height="180"></a></td>
-      <td align="center"><img src="https://cdn.deepseek.com/harness/readme/community-wechat-official-account.png" alt="DeepSeek Harness 团队微信公众号二维码" width="180" height="180"></td>
-    </tr>
-  </tbody>
-</table>
+## Contributing
 
-## 参与贡献
+See [CONTRIBUTING.zh.md](CONTRIBUTING.zh.md).
 
-参见 [CONTRIBUTING.md](CONTRIBUTING.zh.md)。
+## Development
 
-## 开发
+Start with the [development guide](docs/development.zh.md) and [architecture documentation](docs/architecture.zh.md).
 
-请先阅读[开发指南](docs/development.zh.md)与[架构文档](docs/architecture.zh.md)。
+For agents, follow [AGENTS.md](AGENTS.md).
 
-面向 agent：请遵循 [AGENTS.md](AGENTS.md)。
-
-## 引用
+## Citation
 
 ```bibtex
 @misc{deepseek-harness2026,
@@ -89,8 +98,8 @@ pnpm dsh web
 }
 ```
 
-## 许可证
+## License
 
 [MIT](LICENSE)
 
-第三方依赖及其许可证见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+Third-party dependencies and their licenses are disclosed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
