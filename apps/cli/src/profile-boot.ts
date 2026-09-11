@@ -363,22 +363,26 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
       // cordis.patch.yml edits stay live without replacing source modules. A
       // silent skip would break the documented reload contract. HMR injects
       // the timer service, which a bare custom profile may not mount either.
-      if (ctx.get('hmr') === undefined) {
+      if (ctx.get('hmr') === undefined && (ctx.loader as { internal?: unknown }).internal !== undefined) {
         if (ctx.get('timer') === undefined) {
           await ctx.loader.create({ name: '@deepseek-ai/cordis-plugin-timer' })
         }
         await ctx.loader.create({ name: '@deepseek-ai/cordis-plugin-hmr', config: { root: [] } })
       }
-      await watchUserPatches(ctx, {
-        binName: NAME,
-        filename: composed.profile.patchPath,
-        compose: composeLive,
-      })
-      await watchUserPatches(ctx, {
-        binName: NAME,
-        filename: homePatchPath(),
-        compose: composeLive,
-      })
+      if (ctx.get('hmr') !== undefined) {
+        await watchUserPatches(ctx, {
+          binName: NAME,
+          filename: composed.profile.patchPath,
+          compose: composeLive,
+        })
+        if (existsSync(homePatchPath())) {
+          await watchUserPatches(ctx, {
+            binName: NAME,
+            filename: homePatchPath(),
+            compose: composeLive,
+          })
+        }
+      }
     } catch (error) {
       suppressShutdownError(ctx, signalShutdown.signal, error)
     }

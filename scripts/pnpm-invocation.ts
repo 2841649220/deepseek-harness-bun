@@ -11,11 +11,12 @@ export function pnpmInvocation(
   environment: NodeJS.ProcessEnv = process.env,
 ): { command: string; args: string[] } {
   const entrypoint = environment.npm_execpath
-  if (entrypoint === undefined || entrypoint === '') {
-    throw new Error('pnpm invocation: npm_execpath is unavailable; invoke the script through pnpm run.')
+  if (entrypoint !== undefined && entrypoint !== '') {
+    if (/\.[cm]?js$/iu.test(entrypoint)) {
+      return { command: process.execPath, args: [entrypoint, ...args] }
+    }
+    return { command: entrypoint, args: [...args] }
   }
-  if (/\.[cm]?js$/iu.test(entrypoint)) {
-    return { command: process.execPath, args: [entrypoint, ...args] }
-  }
-  return { command: entrypoint, args: [...args] }
+  const defaultCmd = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
+  return { command: defaultCmd, args: [...args] }
 }

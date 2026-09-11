@@ -7,7 +7,7 @@
  */
 
 import { Worker } from 'node:worker_threads'
-import { stripTypeScriptTypes } from 'node:module'
+import * as nodeModule from 'node:module'
 import type { Readable } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
@@ -82,6 +82,25 @@ const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/
  * line/column positions intact.
  */
 const STRIP_WRAP = { prefix: 'async function __dsh_program__() {\n', suffix: '\n}' } as const
+
+/**
+ * Strip TypeScript types from source code. Uses Node 22+ `node:module.stripTypeScriptTypes`
+ * when present, or `Bun.Transpiler` when executing under Bun.
+ */
+function stripTypeScript(program: string): string {
+  const mod = nodeModule as unknown as { stripTypeScriptTypes?: (code: string) => string }
+  if (typeof mod.stripTypeScriptTypes === 'function') {
+    const stripped = mod.stripTypeScriptTypes(STRIP_WRAP.prefix + program + STRIP_WRAP.suffix)
+    return stripped.slice(STRIP_WRAP.prefix.length, stripped.length - STRIP_WRAP.suffix.length)
+  }
+  type BunGlobal = { Bun?: { Transpiler: new (opts: { loader: string }) => { transformSync: (code: string) => string } } }
+  const bun = (globalThis as unknown as BunGlobal).Bun
+  if (bun !== undefined) {
+    const transpiler = new bun.Transpiler({ loader: 'ts' })
+    return transpiler.transformSync(program)
+  }
+  throw new Error('dsh-code-runtime-worker-thread: stripTypeScriptTypes is not supported on this runtime')
+}
 
 /** One in-flight run's host-side state, tracked for disposal. */
 interface LiveRun {
@@ -299,8 +318,7 @@ export class WorkerThreadCodeRuntime extends CodeRuntime {
 
     let code: string
     try {
-      const stripped = stripTypeScriptTypes(STRIP_WRAP.prefix + request.program + STRIP_WRAP.suffix)
-      code = stripped.slice(STRIP_WRAP.prefix.length, stripped.length - STRIP_WRAP.suffix.length)
+      code = stripTypeScript(request.program)
     } catch (error: unknown) {
       // A program that does not survive the type-strip (syntax error,
       // non-erasable syntax like `enum`) is a program failure, reported the
