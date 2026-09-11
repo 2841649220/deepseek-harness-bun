@@ -65,7 +65,16 @@ dsh-bun --profile headless "task"
 dsh-bun --profile web
 ```
 
-#### 3. Run directly from source
+#### 3. Install from a GitHub Release (no registry involved)
+
+Each release also carries the packed tarball, which installs without any registry:
+
+```sh
+bun add -g https://github.com/2841649220/deepseek-harness-bun/releases/download/v0.1.5-rc.2/2841649220-dsh_bun-0.1.5-rc.2.tgz
+dsh-bun --version
+```
+
+#### 4. Run directly from source
 
 Install [Bun](https://bun.sh/) (v1.1.0 or higher), clone the repository and run directly:
 
@@ -80,7 +89,7 @@ Or using the configured npm script in `package.json`:
 bun run dsh:bun --profile headless "task"
 ```
 
-#### 4. Package and publish
+#### 5. Package and publish
 
 The stage copies the built CLI and resolves its dependencies into `dist/dsh_bun`:
 
