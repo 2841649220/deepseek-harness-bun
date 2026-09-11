@@ -22,6 +22,8 @@ interface FixtureOptions {
   binSource?: string
   cliLib?: boolean
   license?: boolean
+  /** Drop the patched workspace package, for the alias-failure case. */
+  patchedPackage?: boolean
 }
 
 /** Write one JSON manifest with the repository's trailing-newline convention. */
@@ -45,7 +47,12 @@ function fixture(options: FixtureOptions = {}): string {
     mkdirSync(lib, { recursive: true })
     writeFileSync(join(lib, 'bin.js'), options.binSource ?? '#!/usr/bin/env node\nconsole.log("dsh")\n', 'utf8')
   }
-  for (const pkg of options.workspacePackages ?? []) {
+  // Every staged wrapper aliases the patched packages onto this distribution's
+  // forks, so a fixture workspace must declare them unless a test opts out.
+  const patched = options.patchedPackage === false
+    ? []
+    : [{ name: '@deepseek-ai/dsh-code-runtime-worker-thread', version: '1.2.3' }]
+  for (const pkg of [...patched, ...options.workspacePackages ?? []]) {
     const dir = join(root, 'packages', 'group', pkg.name.replace(/^@[^/]+\//u, ''))
     mkdirSync(dir, { recursive: true })
     writeJson(join(dir, 'package.json'), { name: pkg.name, version: pkg.version })
@@ -89,7 +96,11 @@ describe('Bun package staging', () => {
       bin: { 'dsh-bun': 'lib/bin.js' },
       license: 'MIT',
       publishConfig: { access: 'public' },
-      dependencies: { '@deepseek-ai/dsh-base': '^1.2.3', commander: '^15.0.0' },
+      dependencies: {
+        '@deepseek-ai/dsh-base': '^1.2.3',
+        commander: '^15.0.0',
+        '@deepseek-ai/dsh-code-runtime-worker-thread': 'npm:@2841649220/dsh-code-runtime-worker-thread@^1.2.3',
+      },
     })
     expect(manifest['dsh']).toBeUndefined()
     expect(manifest['files']).toEqual(['lib/*.js', 'README.md', 'LICENSE'])
@@ -98,6 +109,34 @@ describe('Bun package staging', () => {
     expect(bin).not.toContain('env node')
     expect(staged(staged0.outDir, 'README.md')).toContain('bun add -g dsh_bun')
     expect(staged(staged0.outDir, 'LICENSE')).toBe('MIT\n')
+  })
+
+  it('aliases the patched packages onto this distribution forks', () => {
+    const root = fixture()
+
+    const staged0 = prepareBunPackage({ root })
+
+    const manifest = JSON.parse(staged(staged0.outDir, 'package.json')) as { dependencies: Record<string, string> }
+    expect(manifest.dependencies['@deepseek-ai/dsh-code-runtime-worker-thread'])
+      .toBe('npm:@2841649220/dsh-code-runtime-worker-thread@^1.2.3')
+  })
+
+  it('honours another fork scope and an explicit opt-out', () => {
+    const scoped = prepareBunPackage({ root: fixture(), patchedScope: '@example' })
+    const scopedManifest = JSON.parse(staged(scoped.outDir, 'package.json')) as { dependencies: Record<string, string> }
+    expect(scopedManifest.dependencies['@deepseek-ai/dsh-code-runtime-worker-thread'])
+      .toBe('npm:@example/dsh-code-runtime-worker-thread@^1.2.3')
+
+    const plain = prepareBunPackage({ root: fixture(), outDir: 'dist/plain', patchedScope: '' })
+    const plainManifest = JSON.parse(staged(plain.outDir, 'package.json')) as { dependencies: Record<string, string> }
+    expect(plainManifest.dependencies['@deepseek-ai/dsh-code-runtime-worker-thread']).toBeUndefined()
+  })
+
+  it('refuses to stage when a patched package has no workspace version', () => {
+    const root = fixture({ patchedPackage: false })
+
+    expect(() => prepareBunPackage({ root }))
+      .toThrow('prepare-bun-package: patched package @deepseek-ai/dsh-code-runtime-worker-thread has no workspace version')
   })
 
   it('stages every requested command name', () => {
@@ -143,7 +182,11 @@ describe('Bun package staging', () => {
     const staged0 = prepareBunPackage({ root, depVersion: '^9.9.9' })
 
     const manifest = JSON.parse(staged(staged0.outDir, 'package.json')) as { dependencies: Record<string, string> }
-    expect(manifest.dependencies).toEqual({ '@deepseek-ai/dsh-unpublished': '^9.9.9', commander: '^15.0.0' })
+    expect(manifest.dependencies).toEqual({
+      '@deepseek-ai/dsh-unpublished': '^9.9.9',
+      commander: '^15.0.0',
+      '@deepseek-ai/dsh-code-runtime-worker-thread': 'npm:@2841649220/dsh-code-runtime-worker-thread@^1.2.3',
+    })
   })
 
   it('refuses a workspace dependency the workspace does not declare', () => {
@@ -167,7 +210,10 @@ describe('Bun package staging', () => {
     const staged0 = prepareBunPackage({ root })
 
     const manifest = JSON.parse(staged(staged0.outDir, 'package.json')) as { dependencies: Record<string, string> }
-    expect(manifest.dependencies).toEqual({ '@deepseek-ai/dsh-base': '^1.2.3' })
+    expect(manifest.dependencies).toEqual({
+      '@deepseek-ai/dsh-base': '^1.2.3',
+      '@deepseek-ai/dsh-code-runtime-worker-thread': 'npm:@2841649220/dsh-code-runtime-worker-thread@^1.2.3',
+    })
   })
 
   it('refuses a stage without a bin name', () => {

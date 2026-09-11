@@ -39,6 +39,17 @@ const BUN_SHEBANG = '/usr/bin/env bun'
 /** Repository the published manifest points back to. */
 const REPOSITORY_URL = 'git+https://github.com/2841649220/deepseek-harness-bun.git'
 
+/**
+ * Upstream packages whose published code aborts under Bun, and which this
+ * distribution therefore resolves to a patched fork published under
+ * {@link DEFAULT_PATCHED_SCOPE}. The staged manifest keeps the original name as
+ * an npm alias, so profile rows and the peer ranges that name them still resolve.
+ */
+const PATCHED_PACKAGES: readonly string[] = ['@deepseek-ai/dsh-code-runtime-worker-thread']
+
+/** Scope holding the patched forks; override with `--patched-scope`. */
+const DEFAULT_PATCHED_SCOPE = '@2841649220'
+
 /** The subset of `apps/cli/package.json` the stage reads. */
 interface CliPackageJson {
   name: string
@@ -62,6 +73,8 @@ export interface PrepareBunPackageOptions {
   registry?: string | undefined
   /** Command names mapped to the staged bin; defaults to `dsh-bun`. */
   bins?: readonly string[] | undefined
+  /** Scope holding the patched forks; an empty string leaves every dependency on its published upstream package. */
+  patchedScope?: string | undefined
 }
 
 /**
@@ -69,7 +82,7 @@ export interface PrepareBunPackageOptions {
  * @param rootDir - Workspace root path.
  * @returns Map of package name to version.
  */
-function collectWorkspaceVersions(rootDir: string): Map<string, string> {
+export function collectWorkspaceVersions(rootDir: string): Map<string, string> {
   const versions = new Map<string, string>()
 
   function scan(dir: string, depth = 0): void {
@@ -125,7 +138,7 @@ function withoutShebang(source: string): string {
  * @returns the publication dependency map.
  * @throws when a `workspace:` dependency has neither a workspace version nor an explicit range.
  */
-function publicationDependencies(
+export function publicationDependencies(
   dependencies: Record<string, string>,
   workspaceVersions: Map<string, string>,
   depVersion: string | undefined,
@@ -207,6 +220,25 @@ export function prepareBunPackage(options: PrepareBunPackageOptions = {}): {
   const workspaceVersions = collectWorkspaceVersions(root)
   console.log(`prepare-bun-package: discovered ${workspaceVersions.size} workspace package versions`)
   const dependencies = publicationDependencies(cliPkg.dependencies ?? {}, workspaceVersions, options.depVersion)
+
+  // 4b. Point the packages whose published code cannot run under Bun at this
+  // distribution's patched forks. The range stays the upstream one: the fork
+  // carries the same version, so the alias satisfies every dependent's range.
+  const patchedScope = options.patchedScope ?? DEFAULT_PATCHED_SCOPE
+  const patched: string[] = []
+  if (patchedScope !== '') {
+    for (const name of PATCHED_PACKAGES) {
+      const version0 = workspaceVersions.get(name)
+      if (version0 === undefined) {
+        throw new Error(`prepare-bun-package: patched package ${name} has no workspace version to alias against`)
+      }
+      const replacement = `npm:${patchedScope}/${name.slice(name.indexOf('/') + 1)}@^${version0}`
+      dependencies[name] = replacement
+      patched.push(`${name} -> ${replacement}`)
+    }
+    console.log(`prepare-bun-package: aliased ${patched.length} patched package(s)`)
+    for (const line of patched) console.log(`  ${line}`)
+  }
 
   // 5. Construct the publication manifest. The CLI's `dsh.configTrees` entry is not
   // carried over: it points at a sibling package inside this repository, which
