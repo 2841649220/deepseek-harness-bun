@@ -7,7 +7,6 @@
  */
 
 import { Worker } from 'node:worker_threads'
-import * as nodeModule from 'node:module'
 import type { Readable } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
@@ -20,6 +19,7 @@ import type { ReplyMessage, WorkerBootData, WorkerToHost } from './protocol.ts'
 import { jsonStringBytesUpTo, jsonValueBytesUpTo, truncateJsonStringBytes } from './output-json.ts'
 import { decodeWorkerJson, encodeWorkerJson } from './worker-json.ts'
 import type { WorkerJsonWire } from './worker-json.ts'
+import { stripTypeScript } from './type-strip.ts'
 
 /** Plugin config: every execution cap, changeable from `cordis.yml` (no hardcoded tunables). */
 export interface Config {
@@ -71,36 +71,6 @@ const MIN_OUTPUT_BYTES = 4
  * namespace list must be usable against every backend regardless of language.
  */
 const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/
-
-/**
- * The shell a program is wrapped in for the type-strip, matching the
- * grammatical context it will execute in (an async function body, where
- * top-level `return` and `await` are legal — a bare module parse would
- * reject the `return`). Strip mode is position-preserving (removed syntax
- * becomes whitespace, nothing shifts), so the wrapper survives the strip
- * byte-identical and the body slices back out with the model's own
- * line/column positions intact.
- */
-const STRIP_WRAP = { prefix: 'async function __dsh_program__() {\n', suffix: '\n}' } as const
-
-/**
- * Strip TypeScript types from source code. Uses Node 22+ `node:module.stripTypeScriptTypes`
- * when present, or `Bun.Transpiler` when executing under Bun.
- */
-function stripTypeScript(program: string): string {
-  const mod = nodeModule as unknown as { stripTypeScriptTypes?: (code: string) => string }
-  if (typeof mod.stripTypeScriptTypes === 'function') {
-    const stripped = mod.stripTypeScriptTypes(STRIP_WRAP.prefix + program + STRIP_WRAP.suffix)
-    return stripped.slice(STRIP_WRAP.prefix.length, stripped.length - STRIP_WRAP.suffix.length)
-  }
-  type BunGlobal = { Bun?: { Transpiler: new (opts: { loader: string }) => { transformSync: (code: string) => string } } }
-  const bun = (globalThis as unknown as BunGlobal).Bun
-  if (bun !== undefined) {
-    const transpiler = new bun.Transpiler({ loader: 'ts' })
-    return transpiler.transformSync(program)
-  }
-  throw new Error('dsh-code-runtime-worker-thread: stripTypeScriptTypes is not supported on this runtime')
-}
 
 /** One in-flight run's host-side state, tracked for disposal. */
 interface LiveRun {

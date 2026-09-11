@@ -76,7 +76,7 @@ kind: "package-reference"
 
 ### 执行流程
 
-一次运行在宿主侧剥离类型（`node:module` 的 `stripTypeScriptTypes`，保持字节位置不变），包裹为异步函数的函数体使顶层 `await`／`return` 可用，然后发送给全新的 worker，由 bootstrap 物化绑定命名空间。绑定调用以无损 JSON 跨消息端口传递，每个调用 id 至多应答一次。日志文本主动流向宿主，因此被终止的程序仍会显示已打印的内容。恰好一个结果结算运行——`done` 帧、预算到期、中止或 worker 终止——之后宿主终止 worker 并等待其退出。
+一次运行在宿主侧剥离类型（Node 上使用 `node:module` 的 `stripTypeScriptTypes`，Bun 上使用 `Bun.Transpiler`；两者都剥离异步函数包裹层的函数体，使顶层 `await`／`return` 可用，包裹层自身的代码不会进入 worker），然后发送给全新的 worker，由 bootstrap 物化绑定命名空间。绑定调用以无损 JSON 跨消息端口传递，每个调用 id 至多应答一次。日志文本主动流向宿主，因此被终止的程序仍会显示已打印的内容。恰好一个结果结算运行——`done` 帧、预算到期、中止或 worker 终止——之后宿主终止 worker 并等待其退出。
 
 ### 把对端视为不可信
 
@@ -139,7 +139,7 @@ kind: "package-reference"
 这些限制说明此后端何时不合适，或何时需要特别的运维注意。它们是当前包约束，不是任务积压。
 
 - **程序派生的 OS 进程在程序终止后仍会存活**——`worker.terminate()` 只结束线程，比 bash-local 的进程组终止更弱；在容器后端出现前，孤儿进程清理属于部署职责。
-- **类型剥离依赖 Node 的实验性 `stripTypeScriptTypes` API**——如依赖的行为发生变化，amaro 或 sucrase 是已经点名的直接替代品。
+- **类型剥离依赖运行时能力，而非单一 API**——Node 的实验性 `stripTypeScriptTypes`（如其行为发生变化，amaro 或 sucrase 是已经点名的直接替代品），或 Bun 的转译器；后者是完整的 TypeScript 转换而非剥离：`enum` 等不可擦除语法在 Node 上是程序失败，在 Bun 上则可运行。
 - **`computeMs` 到期最多可能超过一个轮询间隔**——系统每 25 ms 采样一次忙碌时间（内部常量，有意不做成配置）。
 - **程序获得一个含 5 个方法的 `console` shim**（`log`／`info`／`warn`／`error`／`debug`）——有意不提供 Node 的完整 console 接口。
 - **中间绑定值没有字节上限**——程序可以用永远不会成为外层输出的值耗尽进程或 worker 内存。

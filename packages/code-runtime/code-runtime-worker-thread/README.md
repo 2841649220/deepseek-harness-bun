@@ -76,7 +76,7 @@ The backend rests on one separation: **containment, not a security boundary**. M
 
 ### Execution flow
 
-A run is type-stripped host-side (`node:module`'s `stripTypeScriptTypes`, position-preserving), wrapped as the body of an async function so top-level `await`/`return` work, and sent to a fresh worker whose bootstrap materializes the binding namespaces. Binding calls cross the message port as lossless JSON and are answered at most once per call id. Log text streams to the host eagerly so a killed program still shows what it printed. Exactly one outcome settles the run — a `done` frame, a budget expiry, an abort, or worker death — after which the host terminates the worker and awaits its exit.
+A run is type-stripped host-side (`node:module`'s `stripTypeScriptTypes` on Node, `Bun.Transpiler` under Bun; both strip the body of the async-function wrapper so top-level `await`/`return` work and the wrapper's own lines never reach the worker), and sent to a fresh worker whose bootstrap materializes the binding namespaces. Binding calls cross the message port as lossless JSON and are answered at most once per call id. Log text streams to the host eagerly so a killed program still shows what it printed. Exactly one outcome settles the run — a `done` frame, a budget expiry, an abort, or worker death — after which the host terminates the worker and awaits its exit.
 
 ### Hostile-peer port
 
@@ -139,7 +139,7 @@ No direct invalidation; the named consumer owns any request-prefix changes.
 These limits define when the backend is a poor fit or needs special operational care. They are current package constraints, not a task backlog.
 
 - **OS processes a program spawns survive termination** — `worker.terminate()` ends the thread only, weaker than bash-local's process-group kill; orphan cleanup is a deployment concern until a container backend exists.
-- **Type-strip rides Node's experimental `stripTypeScriptTypes` API** — amaro or sucrase are the named drop-in replacements if the relied-on behavior shifts.
+- **Type-strip rides a runtime capability, not one API** — Node's experimental `stripTypeScriptTypes` (amaro or sucrase are the named drop-in replacements if its behavior shifts) or Bun's transpiler, which is a full TypeScript transform rather than a strip: non-erasable syntax such as `enum` is a program failure on Node and a runnable program under Bun.
 - **`computeMs` expiry can overshoot by up to one poll interval** — busy time is sampled every 25 ms (an internal constant, deliberately not config).
 - **Programs get a five-method `console` shim** (`log`/`info`/`warn`/`error`/`debug`) — deliberately not Node's full console API.
 - **Intermediate binding values have no byte cap** — a program can exhaust process or worker memory with a value that never becomes outer output.
