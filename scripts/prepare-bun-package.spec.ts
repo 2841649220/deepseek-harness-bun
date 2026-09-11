@@ -132,6 +132,17 @@ describe('Bun package staging', () => {
     expect(plainManifest.dependencies['@deepseek-ai/dsh-code-runtime-worker-thread']).toBeUndefined()
   })
 
+  it('aliases a patched package to a tarball URL when the registry needs a credential', () => {
+    const url = 'https://github.com/example/repo/releases/download/v1.2.3/dsh-code-runtime-worker-thread-1.2.3.tgz'
+
+    const hosted = prepareBunPackage({ root: fixture(), outDir: 'dist/hosted', patchedUrl: url })
+
+    const manifest = JSON.parse(staged(hosted.outDir, 'package.json')) as { dependencies: Record<string, string> }
+    // A URL is the whole spec: it carries neither an alias prefix nor a range,
+    // because the asset is one immutable build rather than a version to select.
+    expect(manifest.dependencies['@deepseek-ai/dsh-code-runtime-worker-thread']).toBe(url)
+  })
+
   it('refuses to stage when a patched package has no workspace version', () => {
     const root = fixture({ patchedPackage: false })
 

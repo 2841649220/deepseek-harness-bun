@@ -40,9 +40,20 @@ Review the [safety notice](SAFETY.zh.md) before running the project.
 
 ### Run with Bun
 
-#### 1. Install from GitHub Packages (the published channel)
+#### 1. Install from a GitHub Release (recommended, no configuration)
 
-The package is published to GitHub Packages under the `rc` tag, and carries `latest` as well. It requires token authentication even though it is public, and `bunx` reads only the user-level `~/.npmrc` — a project `.npmrc` or `bunfig.toml` has no effect on it:
+The `dsh_bun-0.1.5-rc.2.tgz` asset on the releases page is the complete distributable, and downloading it needs **no account and no token**. Bun fetches the patched dependency from the URL the package declares:
+
+```sh
+bun add -g https://github.com/2841649220/deepseek-harness-bun/releases/download/v0.1.5-rc.2/dsh_bun-0.1.5-rc.2.tgz
+dsh-bun --version
+```
+
+This is the preferred way to hand the build to someone else: one command, no GitHub account, no `~/.npmrc`.
+
+#### 2. Install from GitHub Packages (needs a token)
+
+The package is also published to GitHub Packages under the `rc` tag, and carries `latest` as well. It requires token authentication **even though it is public**, and `bunx` reads only the user-level `~/.npmrc` — a project `.npmrc` or `bunfig.toml` has no effect on it:
 
 ```sh
 # ~/.npmrc (on Windows: C:\Users\<you>\.npmrc)
@@ -64,7 +75,7 @@ bun add -g @2841649220/dsh_bun
 bunx @2841649220/dsh_bun --profile headless "task"
 ```
 
-A global install provides three commands that all drive the same CLI: `dsh`, `dsh-bun`, and `dsh_bun` (`dsh_bun` is the package name and is easy to mistake for the command; all three work):
+Either install provides three commands that all drive the same CLI: `dsh`, `dsh-bun`, and `dsh_bun` (`dsh_bun` is the package name and is easy to mistake for the command; all three work):
 
 ```sh
 dsh web
@@ -76,16 +87,7 @@ dsh_bun web
 
 #### What the package resolves
 
-The published package resolves `@deepseek-ai/dsh-code-runtime-worker-thread` to the patched fork `@2841649220/dsh-code-runtime-worker-thread`, because the upstream release aborts during module evaluation under Bun. The alias lives in package metadata only, so profile configuration and dependency ranges are unchanged; a build that wants the upstream package passes `--patched-scope ''`.
-
-#### 2. Install from a GitHub Release (no registry involved)
-
-Each release also carries the packed tarball, which installs without any registry:
-
-```sh
-bun add -g https://github.com/2841649220/deepseek-harness-bun/releases/download/v0.1.5-rc.2/2841649220-dsh_bun-0.1.5-rc.2.tgz
-dsh-bun --version
-```
+The published package resolves `@deepseek-ai/dsh-code-runtime-worker-thread` to the patched fork `@2841649220/dsh-code-runtime-worker-thread`, because the upstream release aborts during module evaluation under Bun. The alias lives in package metadata only, so profile configuration and dependency ranges are unchanged. A GitHub Packages install points it at the package in that scope; a release install points it at the patched tarball asset (`--patched-url`), which is why the release route needs no registry credential at all. A build that wants the upstream package passes `--patched-scope ''`.
 
 #### 3. Run directly from source
 

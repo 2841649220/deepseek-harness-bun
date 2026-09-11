@@ -75,6 +75,13 @@ export interface PrepareBunPackageOptions {
   bins?: readonly string[] | undefined
   /** Scope holding the patched forks; an empty string leaves every dependency on its published upstream package. */
   patchedScope?: string | undefined
+  /**
+   * Tarball URL holding the patched fork, published as a release asset where
+   * the registry serving the distribution needs a credential to download
+   * (GitHub Packages does, even for a public package). Takes precedence over
+   * {@link PrepareBunPackageOptions.patchedScope}.
+   */
+  patchedUrl?: string | undefined
 }
 
 /**
@@ -226,13 +233,16 @@ export function prepareBunPackage(options: PrepareBunPackageOptions = {}): {
   // carries the same version, so the alias satisfies every dependent's range.
   const patchedScope = options.patchedScope ?? DEFAULT_PATCHED_SCOPE
   const patched: string[] = []
-  if (patchedScope !== '') {
+  if (options.patchedUrl !== undefined || patchedScope !== '') {
     for (const name of PATCHED_PACKAGES) {
       const version0 = workspaceVersions.get(name)
       if (version0 === undefined) {
         throw new Error(`prepare-bun-package: patched package ${name} has no workspace version to alias against`)
       }
-      const replacement = `npm:${patchedScope}/${name.slice(name.indexOf('/') + 1)}@^${version0}`
+      // A tarball URL is a complete spec on its own; only the registry form
+      // needs the npm-alias prefix that keeps the original name resolvable.
+      const replacement = options.patchedUrl
+        ?? `npm:${patchedScope}/${name.slice(name.indexOf('/') + 1)}@^${version0}`
       dependencies[name] = replacement
       patched.push(`${name} -> ${replacement}`)
     }
@@ -364,6 +374,8 @@ if (import.meta.main) {
       registry: { type: 'string' },
       bin: { type: 'string', multiple: true },
       'with-dsh-bin': { type: 'boolean' },
+      'patched-scope': { type: 'string' },
+      'patched-url': { type: 'string' },
     },
     allowPositionals: false,
   })
@@ -378,6 +390,8 @@ if (import.meta.main) {
     depVersion: values['dep-version'],
     registry: values.registry,
     bins,
+    patchedScope: values['patched-scope'],
+    patchedUrl: values['patched-url'],
   })
 
   console.log('\nReady to publish or test:')

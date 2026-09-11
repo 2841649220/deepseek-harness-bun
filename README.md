@@ -40,9 +40,20 @@ DeepSeek Harness 处于 _开发者预览_ 阶段，正在快速迭代。**未来
 
 ### 通过 Bun 运行
 
-#### 1. 从 GitHub Packages 安装（默认渠道）
+#### 1. 从 GitHub Release 安装（推荐，零配置）
 
-包发布在 GitHub Packages 上，tag 为 `rc`，同时打有 `latest`。它要求带 token 的认证（公开包也一样），而且 `bunx` 只读用户级 `~/.npmrc`——项目里的 `.npmrc` 或 `bunfig.toml` 对它无效：
+发布页上的 `dsh_bun-0.1.5-rc.2.tgz` 是完整可分发的包，**下载不需要任何账号或 token**，安装时 Bun 会自动按包内声明的 URL 取回补丁依赖：
+
+```sh
+bun add -g https://github.com/2841649220/deepseek-harness-bun/releases/download/v0.1.5-rc.2/dsh_bun-0.1.5-rc.2.tgz
+dsh-bun --version
+```
+
+这是给别人装的首选方式：一条命令，无需 GitHub 账号、无需 `~/.npmrc`。
+
+#### 2. 从 GitHub Packages 安装（需要 token）
+
+包也发布在 GitHub Packages 上，tag 为 `rc`，同时打有 `latest`。**公开包同样要求带 token 的认证**，而且 `bunx` 只读用户级 `~/.npmrc`——项目里的 `.npmrc` 或 `bunfig.toml` 对它无效：
 
 ```sh
 # ~/.npmrc (on Windows: C:\Users\<you>\.npmrc)
@@ -64,7 +75,7 @@ bun add -g @2841649220/dsh_bun
 bunx @2841649220/dsh_bun --profile headless "task"
 ```
 
-全局安装后有三个命令指向同一个 CLI：`dsh`、`dsh-bun`、`dsh_bun`（`dsh_bun` 是包名，容易误当成命令；实际上面三个都能用）：
+两种安装方式都会提供三个指向同一 CLI 的命令：`dsh`、`dsh-bun`、`dsh_bun`（`dsh_bun` 是包名，容易误当成命令；实际上面三个都能用）：
 
 ```sh
 dsh web
@@ -76,16 +87,7 @@ dsh_bun web
 
 #### 打包内容说明
 
-发布包把 `@deepseek-ai/dsh-code-runtime-worker-thread` 解析到本仓库发布的补丁分支 `@2841649220/dsh-code-runtime-worker-thread`（上游发布版在 Bun 下模块求值阶段即失败）。别名只在包元数据里，profile 配置与依赖范围不变；不需要该补丁的构建可用 `--patched-scope ''` 关闭。
-
-#### 2. 从 GitHub Release 安装（不经过 registry）
-
-发布包里同时附带打包好的 tarball，可直接安装，无需任何 registry：
-
-```sh
-bun add -g https://github.com/2841649220/deepseek-harness-bun/releases/download/v0.1.5-rc.2/2841649220-dsh_bun-0.1.5-rc.2.tgz
-dsh-bun --version
-```
+发布包把 `@deepseek-ai/dsh-code-runtime-worker-thread` 解析到本仓库发布的补丁分支 `@2841649220/dsh-code-runtime-worker-thread`（上游发布版在 Bun 下模块求值阶段即失败）。别名只在包元数据里，profile 配置与依赖范围不变。从 GitHub Packages 安装时该别名指向同 scope 的包，从 Release 安装时指向发布页上的补丁 tarball（`--patched-url`），因此后者无需任何 registry 凭据；不需要该补丁的构建可用 `--patched-scope ''` 关闭。
 
 #### 3. 源码本地调试与开发
 

@@ -9,6 +9,12 @@ permissions:
   contents: read
   packages: write
 
+# Two channels ship from one build. GitHub Packages carries the registry copy,
+# where a credential is required to download even a public package. The release
+# assets carry the same distribution for readers who have no token: the wrapper
+# names its patched fork by asset URL, so an install pulls both objects from the
+# release with no registry involved.
+#
 # The staged distribution resolves the packages whose published code aborts under
 # Bun to this scope's patched forks (`PATCHED_PACKAGES` in
 # `scripts/prepare-bun-package.ts`), so the fork publishes before the wrapper that
@@ -71,3 +77,55 @@ jobs:
           npm publish --tag rc
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  release-assets:
+    name: Attach the credential-free release assets
+    needs: publish
+    if: github.event_name == 'release'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build libraries
+        run: pnpm run build:lib
+
+      - name: Stage the fork the wrapper names by URL
+        run: >-
+          pnpm run package:fork --
+          --name @2841649220/dsh-code-runtime-worker-thread
+          --out dist/fork-release
+
+      - name: Stage the wrapper against that URL
+        run: >-
+          pnpm run package:bun --
+          --name dsh_bun
+          --patched-url
+          https://github.com/${{ github.repository }}/releases/download/${{ github.event.release.tag_name }}/dsh-code-runtime-worker-thread-${{ github.event.release.tag_name }}.tgz
+          --bin dsh-bun --bin dsh --bin dsh_bun
+
+      - name: Pack both tarballs
+        run: |
+          npm pack ./dist/fork-release --pack-destination "${{ runner.temp }}/assets"
+          npm pack ./dist/dsh_bun --pack-destination "${{ runner.temp }}/assets"
+          cd "${{ runner.temp }}/assets"
+          mv 2841649220-dsh-code-runtime-worker-thread-*.tgz dsh-code-runtime-worker-thread-${{ github.event.release.tag_name }}.tgz
+          mv dsh_bun-*.tgz dsh_bun-${{ github.event.release.tag_name }}.tgz
+          ls -l
+
+      - name: Attach the assets
+        run: gh release upload "${{ github.event.release.tag_name }}" "${{ runner.temp }}/assets"/*.tgz --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
